@@ -1,3 +1,5 @@
+//! Shader Execution Pipeline
+
 use std::sync::Arc;
 
 use nalgebra::{Point3, Vector2, Vector4};
@@ -12,21 +14,48 @@ use super::framebuffer::FrameBuffer;
 use super::uniform::BarycentricInterpolation;
 
 pub struct Pipeline<U, P> where P: Pixel, U: Send + Sync {
-    uniforms: Arc<U>,
-    framebuffer: Arc<FrameBuffer<P>>,
+    framebuffer: FrameBuffer<P>,
+    uniforms: U,
 }
 
-impl<U, P> Pipeline<U, P> where U: Send + Sync, P: Pixel {}
+impl<U, P> Pipeline<U, P> where U: Send + Sync,
+                                P: Pixel {
+    /// Create a new rendering pipeline instance
+    pub fn new(framebuffer: FrameBuffer<P>, uniforms: U) -> Pipeline<U, P> {
+        Pipeline {
+            framebuffer: framebuffer,
+            uniforms: uniforms,
+        }
+    }
 
-pub struct VertexShader<V, U, P> where V: Send + Sync,
-                                       U: Send + Sync,
-                                       P: Pixel {
+    /// Start the shading pipeline for a given mesh
+    pub fn start_mesh<V>(&mut self, mesh: Arc<Mesh<V>>) -> VertexShader<V, U, P> where V: Send + Sync {
+        VertexShader {
+            mesh: mesh,
+            uniforms: &self.uniforms,
+            framebuffer: &mut self.framebuffer,
+        }
+    }
+
+    /// Returns a reference to the uniforms value
+    pub fn uniforms(&self) -> &U { &self.uniforms }
+    /// Returns a mutable reference to the uniforms value
+    pub fn uniforms_mut(&mut self) -> &mut U { &mut self.uniforms }
+
+    /// Returns a reference to the framebuffer
+    pub fn framebuffer(&self) -> &FrameBuffer<P> { &self.framebuffer }
+    /// Returns a mutable reference to the framebuffer
+    pub fn framebuffer_mut(&mut self) -> &mut FrameBuffer<P> { &mut self.framebuffer }
+}
+
+pub struct VertexShader<'a, V, U, P: 'static> where V: Send + Sync,
+                                                    U: Send + Sync + 'a,
+                                                    P: Pixel {
     mesh: Arc<Mesh<V>>,
-    uniforms: Arc<U>,
-    framebuffer: Arc<FrameBuffer<P>>,
+    uniforms: &'a U,
+    framebuffer: &'a mut FrameBuffer<P>,
 }
 
-#[derive(Debug, Clone)]
 pub struct ClipVertex<K> where K: Send + Sync + BarycentricInterpolation {
     pub position: Vector4<f32>,
     pub uniforms: K,
@@ -46,7 +75,7 @@ impl<K> ClipVertex<K> where K: Send + Sync + BarycentricInterpolation {
                     1.0
                 )
             },
-            uniforms: self.uniforms
+            uniforms: self.uniforms,
         }
     }
 }
@@ -56,11 +85,11 @@ pub struct ScreenVertex<K> where K: Send + Sync + BarycentricInterpolation {
     pub uniforms: K,
 }
 
-impl<V, U, P> VertexShader<V, U, P> where V: Send + Sync,
-                                          U: Send + Sync,
-                                          P: Pixel {
-    pub fn vertex_shader<S, K>(self, vertex_shader: S) -> FragmentShader<V, U, K, P> where S: Fn(&Vertex<V>, &U) -> ClipVertex<K> + Sync,
-                                                                                           K: Send + Sync + BarycentricInterpolation {
+impl<'a, V, U, P: 'static> VertexShader<'a, V, U, P> where V: Send + Sync,
+                                                           U: Send + Sync + 'a,
+                                                           P: Pixel {
+    pub fn vertex_shader<S, K>(self, vertex_shader: S) -> FragmentShader<'a, V, U, K, P> where S: Fn(&Vertex<V>, &U) -> ClipVertex<K> + Sync,
+                                                                                               K: Send + Sync + BarycentricInterpolation {
         let screen_vertices = self.mesh.vertices.par_iter()
                                                 .map(|vertex| {
                                                     vertex_shader(vertex, &*self.uniforms)
@@ -77,20 +106,20 @@ impl<V, U, P> VertexShader<V, U, P> where V: Send + Sync,
     }
 }
 
-pub struct FragmentShader<V, U, K, P> where V: Send + Sync,
-                                            U: Send + Sync,
-                                            K: Send + Sync + BarycentricInterpolation,
-                                            P: Pixel {
+pub struct FragmentShader<'a, V, U, K, P: 'static> where V: Send + Sync,
+                                                         U: Send + Sync + 'a,
+                                                         K: Send + Sync + BarycentricInterpolation,
+                                                         P: Pixel {
     mesh: Arc<Mesh<V>>,
-    uniforms: Arc<U>,
-    framebuffer: Arc<FrameBuffer<P>>,
+    uniforms: &'a U,
+    framebuffer: &'a mut FrameBuffer<P>,
     screen_vertices: Vec<ScreenVertex<K>>,
 }
 
-impl<V, U, K, P> FragmentShader<V, U, K, P> where V: Send + Sync,
-                                                  U: Send + Sync,
-                                                  K: Send + Sync + BarycentricInterpolation,
-                                                  P: Pixel {
+impl<'a, V, U, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send + Sync,
+                                                                   U: Send + Sync + 'a,
+                                                                   K: Send + Sync + BarycentricInterpolation,
+                                                                   P: Pixel {
     pub fn fragment_shader<S>(self, fragment_shader: S) where S: Fn(&ScreenVertex<K>) -> P {
         self.mesh.indices.par_chunks(3).map(|triangle| {
             if triangle.len() == 3 {
