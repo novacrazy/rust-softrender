@@ -10,10 +10,20 @@ pub struct FrameBuffer<P: Pixel> {
     height: u32,
     depth: Vec<f32>,
     color: Vec<P>,
-    blend_func: Box<Fn(P, P) -> P + Send + Sync>
+    blend_func: Box<Fn(P, P) -> P + Send + Sync>,
+    viewport: (f32, f32),
 }
 
 impl<P: Pixel> FrameBuffer<P> {
+    /// Get the projection viewport dimensions
+    #[inline(always)]
+    pub fn viewport(&self) -> (f32, f32) { self.viewport }
+
+    /// Set the projection viewport dimensions
+    pub fn set_viewport(&mut self, viewport: (f32, f32)) {
+        self.viewport = viewport;
+    }
+
     /// Get the width of the framebuffer in pixels
     #[inline(always)]
     pub fn width(&self) -> u32 { self.width }
