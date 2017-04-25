@@ -1,3 +1,5 @@
+//! Relatively simple software rendering of 3D meshes.
+
 extern crate nalgebra;
 extern crate rayon;
 

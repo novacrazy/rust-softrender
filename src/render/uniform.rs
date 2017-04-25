@@ -1,7 +1,12 @@
+//! Types and traits for uniform variables
+
 use nalgebra::*;
 
 use std::ops::{Add, Mul};
 
+/// Describes a type that can be interpolated with barycentric coordinates.
+///
+/// This is required for any rasterization to occur.
 pub trait BarycentricInterpolation: Sized + Add<Output=Self> + Add<f32, Output=Self> + Mul<f32, Output=Self> {
     fn interpolate(a: f32, a1: f32, x1: Self, a2: f32, x2: Self, a3: f32, x3: Self) -> Self {
         // In debug mode, assert that the total combined area is approximately equal to the actual area
