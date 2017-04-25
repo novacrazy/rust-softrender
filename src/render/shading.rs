@@ -7,7 +7,7 @@ use rayon::prelude::*;
 use ::pixel::Pixel;
 use ::mesh::{Mesh, Vertex};
 
-use super::screen::FrameBuffer;
+use super::framebuffer::FrameBuffer;
 use super::uniform::BarycentricInterpolation;
 
 pub struct Pipeline<U, P> where P: Pixel, U: Send + Sync {
