@@ -15,8 +15,8 @@ pub struct Vertex<V> {
 /// Mesh structure with indexed vertices.
 #[derive(Clone)]
 pub struct Mesh<V> {
-    pub indices: Arc<Vec<u32>>,
-    pub vertices: Arc<Vec<Vertex<V>>>,
+    pub indices: Vec<u32>,
+    pub vertices: Vec<Vertex<V>>,
 }
 
 impl<V> Debug for Mesh<V> {
