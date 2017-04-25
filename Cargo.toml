@@ -1,0 +1,12 @@
+[package]
+authors = ["Aaron Trent <novacrazy@gmail.com>"]
+name = "rust-softrender"
+version = "0.1.0"
+
+[dependencies]
+nalgebra = "0.11.3"
+rayon = "0.7.0"
+
+[dependencies.image]
+optional = true
+version = "0.12.4"
