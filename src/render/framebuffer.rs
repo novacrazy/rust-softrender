@@ -53,6 +53,12 @@ impl<P: Pixel> FrameBuffer<P> {
                     || { for mut pv in color { *pv = pixel; } });
     }
 
+    /// Get a reference to the color buffer
+    pub fn color_buffer(&self) -> &Vec<P> { &self.color }
+
+    // Get a reference to the depth buffer
+    pub fn depth_buffer(&self) -> &Vec<f32> { &self.depth }
+
     /// Get the projection viewport dimensions
     #[inline(always)]
     pub fn viewport(&self) -> (f32, f32) { self.viewport }

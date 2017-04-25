@@ -29,7 +29,7 @@ impl<U, P> Pipeline<U, P> where U: Send + Sync,
     }
 
     /// Start the shading pipeline for a given mesh
-    pub fn start_mesh<V>(&mut self, mesh: Arc<Mesh<V>>) -> VertexShader<V, U, P> where V: Send + Sync {
+    pub fn render_mesh<V>(&mut self, mesh: Arc<Mesh<V>>) -> VertexShader<V, U, P> where V: Send + Sync {
         VertexShader {
             mesh: mesh,
             uniforms: &self.uniforms,
@@ -62,6 +62,11 @@ pub struct ClipVertex<K> where K: Send + Sync + BarycentricInterpolation {
 }
 
 impl<K> ClipVertex<K> where K: Send + Sync + BarycentricInterpolation {
+    #[inline(always)]
+    pub fn new(position: Vector4<f32>, uniforms: K) -> ClipVertex<K> {
+        ClipVertex {position: position, uniforms: uniforms}
+    }
+
     pub fn normalize(self, viewport: (f32, f32)) -> ScreenVertex<K> {
         ScreenVertex {
             position: {
@@ -88,14 +93,12 @@ pub struct ScreenVertex<K> where K: Send + Sync + BarycentricInterpolation {
 impl<'a, V, U, P: 'static> VertexShader<'a, V, U, P> where V: Send + Sync,
                                                            U: Send + Sync + 'a,
                                                            P: Pixel {
-    pub fn vertex_shader<S, K>(self, vertex_shader: S) -> FragmentShader<'a, V, U, K, P> where S: Fn(&Vertex<V>, &U) -> ClipVertex<K> + Sync,
+    pub fn run<S, K>(self, vertex_shader: S) -> FragmentShader<'a, V, U, K, P> where S: Fn(&Vertex<V>, &U) -> ClipVertex<K> + Sync,
                                                                                                K: Send + Sync + BarycentricInterpolation {
-        let screen_vertices = self.mesh.vertices.par_iter()
-                                                .map(|vertex| {
-                                                    vertex_shader(vertex, &*self.uniforms)
-                                                        .normalize(self.framebuffer.viewport())
-                                                })
-                                                .collect();
+        let screen_vertices = self.mesh.vertices.par_iter().map(|vertex| {
+            vertex_shader(vertex, &*self.uniforms)
+                .normalize(self.framebuffer.viewport())
+        }).collect();
 
         FragmentShader {
             mesh: self.mesh,
@@ -120,7 +123,7 @@ impl<'a, V, U, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send + Syn
                                                                    U: Send + Sync + 'a,
                                                                    K: Send + Sync + BarycentricInterpolation,
                                                                    P: Pixel {
-    pub fn fragment_shader<S>(self, fragment_shader: S) where S: Fn(&ScreenVertex<K>) -> P {
+    pub fn run<S>(self, fragment_shader: S) where S: Fn(&ScreenVertex<K>, &U) -> P {
         self.mesh.indices.par_chunks(3).map(|triangle| {
             if triangle.len() == 3 {
                 let ref a = self.screen_vertices[triangle[0] as usize];
