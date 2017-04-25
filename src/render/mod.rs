@@ -1,4 +1,3 @@
-pub mod pixel;
 pub mod screen;
 pub mod projection;
 pub mod rasterize;

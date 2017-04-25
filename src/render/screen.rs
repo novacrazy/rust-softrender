@@ -1,4 +1,4 @@
-use super::pixel::Pixel;
+use ::pixel::Pixel;
 
 #[derive(Clone)]
 pub struct FrameBuffer<P: Pixel> {
