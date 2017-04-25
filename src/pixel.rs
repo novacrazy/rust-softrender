@@ -5,6 +5,7 @@ pub trait Pixel: Send + Sync {}
 
 /// The most dead simple f32 pixel representation
 #[derive(Debug, Clone, Copy)]
+#[repr(C)] //to prevent field reordering
 pub struct RGBAf32Pixel {
     /// Red Component
     pub r: f32,
