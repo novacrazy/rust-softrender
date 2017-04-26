@@ -3,7 +3,7 @@ extern crate rust_softrender;
 
 use std::sync::Arc;
 
-use nalgebra::{Point3, Vector4};
+use nalgebra::{Point3, Vector4, Vector3};
 
 use rust_softrender::pixel::RGBAf32Pixel;
 use rust_softrender::mesh::{Mesh, Vertex};
@@ -56,19 +56,30 @@ fn get_cube() -> Arc<Mesh<()>> {
 }
 
 fn main() {
-    let mut pipeline = ShadingPipeline::new(FrameBuffer::<RGBAf32Pixel>::new(1000, 1000), ());
+    let framebuffer = FrameBuffer::<RGBAf32Pixel>::new(1000, 1000);
 
     let cube = get_cube();
+
+    let view = nalgebra::Isometry3::look_at_rh(
+        &Point3::new(5.0, 5.0, 5.0),
+        &Point3::origin(),
+        &Vector3::new(0.0, 1.0, 0.0)
+    ).to_homogeneous();
+
+    let projection = nalgebra::Perspective3::new(framebuffer.width() as f32 / framebuffer.height() as f32,
+                                                 75.0f32.to_radians(), 0.001, 1000.0).to_homogeneous();
+
+    let mut pipeline = ShadingPipeline::new(framebuffer, ());
 
     let vertex_shader = pipeline.render_mesh(cube.clone());
 
     let fragment_shader = vertex_shader.run(|vertex, _| {
-        // Do all matrix transforms here
-        ClipVertex::new(Vector4::new(1.0, 1.0, 1.0, 0.0), 0.0)
+        let position = projection * view * vertex.position.to_homogeneous();
+        ClipVertex::new(position, 0.0)
     });
 
     fragment_shader.run(|position, _| {
         // Determine the color of the pixel here
-        RGBAf32Pixel::default()
+        RGBAf32Pixel { r: 1.0, g: 1.0, b: 1.0, a: 1.0 }
     });
 }
