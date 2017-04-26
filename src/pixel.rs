@@ -1,7 +1,9 @@
 //! Pixel definition and operations
 
 /// Trait required to distinguish pixel type for use in the framebuffer and fragment shader
-pub trait Pixel: Clone + Copy + Send + Sync {}
+pub trait Pixel: Clone + Copy + Send + Sync {
+    fn empty() -> Self;
+}
 
 /// The most dead simple f32 pixel representation
 #[derive(Debug, Clone, Copy)]
@@ -23,4 +25,8 @@ impl Default for RGBAf32Pixel {
     }
 }
 
-impl Pixel for RGBAf32Pixel {}
+impl Pixel for RGBAf32Pixel {
+    fn empty() -> RGBAf32Pixel {
+        RGBAf32Pixel { r: 0.0, g: 0.0, b: 0.0, a: 0.0 }
+    }
+}
