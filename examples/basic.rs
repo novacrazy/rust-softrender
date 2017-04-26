@@ -8,6 +8,7 @@ use nalgebra::{Point3, Vector4, Vector3};
 use rust_softrender::pixel::RGBAf32Pixel;
 use rust_softrender::mesh::{Mesh, Vertex};
 use rust_softrender::render::{FrameBuffer, ShadingPipeline, ClipVertex, ScreenVertex};
+use rust_softrender::image_compat::ImageFrameBuffer;
 
 fn get_cube() -> Arc<Mesh<()>> {
     let vertices = vec![Point3::new(0.583, 0.771, 0.014),
@@ -56,7 +57,16 @@ fn get_cube() -> Arc<Mesh<()>> {
 }
 
 fn main() {
-    let framebuffer = FrameBuffer::<RGBAf32Pixel>::new(1000, 1000);
+    let mut framebuffer = FrameBuffer::<RGBAf32Pixel>::new_with(1000, 1000, RGBAf32Pixel { r: 1.0, g: 1.0, b: 1.0, a: 1.0 });
+
+    framebuffer.set_blend_function(|a, b| {
+        RGBAf32Pixel {
+            r: a.r * a.a + b.r * (1.0 - a.a),
+            g: a.g * a.a + b.g * (1.0 - a.a),
+            b: a.b * a.a + b.b * (1.0 - a.a),
+            a: a.a + b.a,
+        }
+    });
 
     let cube = get_cube();
 
@@ -71,15 +81,21 @@ fn main() {
 
     let mut pipeline = ShadingPipeline::new(framebuffer, ());
 
-    let vertex_shader = pipeline.render_mesh(cube.clone());
+    {
+        let vertex_shader = pipeline.render_mesh(cube.clone());
 
-    let fragment_shader = vertex_shader.run(|vertex, _| {
-        let position = projection * view * vertex.position.to_homogeneous();
-        ClipVertex::new(position, 0.0)
-    });
+        let fragment_shader = vertex_shader.run(|vertex, _| {
+            let position = projection * view * vertex.position.to_homogeneous();
+            ClipVertex::new(position, 0.0)
+        });
 
-    fragment_shader.run(|position, _| {
-        // Determine the color of the pixel here
-        RGBAf32Pixel { r: 1.0, g: 1.0, b: 1.0, a: 1.0 }
-    });
+        fragment_shader.run(|position, _| {
+            // Determine the color of the pixel here
+            RGBAf32Pixel { r: 0.0, g: 0.0, b: 0.0, a: 1.0 }
+        });
+    }
+
+    let image = pipeline.framebuffer().copy_to_image().unwrap();
+
+    image.save("examples/basic.png").unwrap();
 }
