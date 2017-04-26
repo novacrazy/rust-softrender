@@ -1,6 +1,6 @@
 [package]
 authors = ["Aaron Trent <novacrazy@gmail.com>"]
-name = "rust-softrender"
+name = "softrender"
 version = "0.1.0"
 
 [dependencies]

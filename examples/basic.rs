@@ -1,14 +1,14 @@
 extern crate nalgebra;
-extern crate rust_softrender;
+extern crate softrender;
 
 use std::sync::Arc;
 
 use nalgebra::{Point3, Vector4, Vector3};
 
-use rust_softrender::pixel::RGBAf32Pixel;
-use rust_softrender::mesh::{Mesh, Vertex};
-use rust_softrender::render::{FrameBuffer, ShadingPipeline, ClipVertex, ScreenVertex};
-use rust_softrender::image_compat::ImageFrameBuffer;
+use softrender::pixel::RGBAf32Pixel;
+use softrender::mesh::{Mesh, Vertex};
+use softrender::render::{FrameBuffer, ShadingPipeline, ClipVertex, ScreenVertex};
+use softrender::image_compat::ImageFrameBuffer;
 
 fn get_cube() -> Arc<Mesh<()>> {
     let vertices = vec![Point3::new(0.583, 0.771, 0.014),
