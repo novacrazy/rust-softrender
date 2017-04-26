@@ -4,7 +4,7 @@ name = "rust-softrender"
 version = "0.1.0"
 
 [dependencies]
-nalgebra = "0.11.3"
+nalgebra = "0.12"
 rayon = "0.7.0"
 
 [dependencies.image]
