@@ -1,5 +1,5 @@
 //! Minimalist framebuffer structure with an emphasis on performance
-use rayon;
+use std::sync::Arc;
 
 use ::pixel::Pixel;
 
@@ -11,7 +11,7 @@ pub struct FrameBuffer<P: Pixel> {
     height: u32,
     depth: Vec<f32>,
     color: Vec<P>,
-    blend_func: Box<Fn(P, P) -> P + Send + Sync>,
+    blend_func: Arc<Box<Fn(P, P) -> P + Send + Sync>>,
     viewport: (f32, f32),
 }
 
@@ -31,8 +31,21 @@ impl<P: Pixel> FrameBuffer<P> {
             height: height,
             depth: vec![DEFAULT_DEPTH_VALUE; len],
             color: vec![pixel; len],
-            blend_func: Box::new(|s, _| s),
+            blend_func: Arc::new(Box::new(|s, _| s)),
             viewport: (width as f32, height as f32)
+        }
+    }
+
+    pub fn empty_clone(&self) -> FrameBuffer<P> {
+        let len = self.width as usize * self.height as usize;
+
+        FrameBuffer {
+            width: self.width,
+            height: self.height,
+            depth: vec![DEFAULT_DEPTH_VALUE; len],
+            color: vec![P::empty(); len],
+            blend_func: self.blend_func.clone(),
+            viewport: self.viewport
         }
     }
 
@@ -43,21 +56,29 @@ impl<P: Pixel> FrameBuffer<P> {
 
     /// Sets all depth values to their default and the color values to the given pixel.
     pub fn clear_with(&mut self, pixel: P) {
-        let ref mut depth = self.depth;
-        let ref mut color = self.color;
-
-        // Might as well clear them both in parallel.
-        // Although I'll have to test if it's faster this way or to just do them sequentially,
-        // because of thread scheduling overhead and so forth.
-        rayon::join(|| { for mut dv in depth { *dv = DEFAULT_DEPTH_VALUE; } },
-                    || { for mut pv in color { *pv = pixel; } });
+        for mut dv in &mut self.depth { *dv = DEFAULT_DEPTH_VALUE; }
+        for mut pv in &mut self.color { *pv = pixel; }
     }
 
     /// Get a reference to the color buffer
     pub fn color_buffer(&self) -> &Vec<P> { &self.color }
+    /// Get a mutable reference to the color buffer
+    pub fn color_buffer_mut(&mut self) -> &mut Vec<P> { &mut self.color }
 
-    // Get a reference to the depth buffer
+    /// Get a reference to the depth buffer
     pub fn depth_buffer(&self) -> &Vec<f32> { &self.depth }
+    /// Get a mutable reference to the depth buffer
+    pub fn depth_buffer_mut(&mut self) -> &mut Vec<f32> { &mut self.depth }
+
+    /// Returns references to all buffers at once
+    pub fn buffers(&self) -> (&Vec<P>, &Vec<f32>) {
+        (&self.color, &self.depth)
+    }
+
+    /// Returns mutable references to all buffers at once
+    pub fn buffers_mut(&mut self) -> (&mut Vec<P>, &mut Vec<f32>) {
+        (&mut self.color, &mut self.depth)
+    }
 
     /// Get the projection viewport dimensions
     #[inline(always)]
@@ -76,15 +97,13 @@ impl<P: Pixel> FrameBuffer<P> {
     #[inline(always)]
     pub fn height(&self) -> u32 { self.height }
 
-    /// Blend two pixels together with the set blend functions
-    #[inline(always)]
-    pub fn blend(&self, source: P, destination: P) -> P {
-        (*self.blend_func)(source, destination)
+    pub fn blend_func(&self) -> Arc<Box<Fn(P, P) -> P + Send + Sync>> {
+        self.blend_func.clone()
     }
 
     /// Set the pixel blend function
     pub fn set_blend_function<F>(&mut self, f: F) where F: Fn(P, P) -> P + Send + Sync + 'static {
-        self.blend_func = Box::new(f)
+        self.blend_func = Arc::new(Box::new(f))
     }
 
     /// Check if some x and y coordinate is a valid pixel coordinate
