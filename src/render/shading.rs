@@ -7,6 +7,7 @@ use nalgebra::{Point3, Vector2, Vector4};
 use nalgebra::core::coordinates::XYZW;
 
 use rayon::prelude::*;
+use rayon::current_num_threads;
 
 use ::pixel::Pixel;
 use ::mesh::{Mesh, Vertex};
@@ -144,12 +145,14 @@ impl<'a, V, U, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send + Syn
                                                                    U: Send + Sync + 'a,
                                                                    K: Send + Sync + BarycentricInterpolation,
                                                                    P: Pixel {
-    pub fn run<S>(self, fragment_shader: S) where S: Fn(&ScreenVertex<K>, &U) -> P {
-        let bb = (self.framebuffer.width() as f32, self.framebuffer.height() as f32);
-
+    pub fn run<S>(mut self, fragment_shader: S) where S: Fn(&ScreenVertex<K>, &U) -> P + Send + Sync {
         println!("Running fragment shader");
 
-        self.mesh.indices.par_chunks(3).filter_map(|triangle| -> Option<(_, f32)> {
+        let bb = (self.framebuffer.width() as f32, self.framebuffer.height() as f32);
+
+        let triangles_per_thread = self.mesh.indices.len() / (3 * current_num_threads());
+
+        let partial_framebuffers: Vec<FrameBuffer<P>> = self.mesh.indices.par_chunks(3).with_min_len(triangles_per_thread).filter_map(|triangle| -> Option<(_, f32)> {
             // if there are three points at all, go ahead
             if triangle.len() == 3 {
                 let ref a = self.screen_vertices[triangle[0] as usize];
@@ -180,14 +183,17 @@ impl<'a, V, U, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send + Syn
             } else {
                 None
             }
-        }).map(|(triangle, area)| {
+        }).fold(|| {
+            println!("New framebuffer clone");
+            self.framebuffer.empty_clone()
+        }, |mut framebuffer, (triangle, area)| {
             let ref a = self.screen_vertices[triangle[0] as usize];
             let ref b = self.screen_vertices[triangle[1] as usize];
             let ref c = self.screen_vertices[triangle[2] as usize];
 
-            let (x1, y1) = (a.position.x, a.position.y);
-            let (x2, y2) = (b.position.x, b.position.y);
-            let (x3, y3) = (c.position.x, c.position.y);
+            let (x1, y1, z1) = (a.position.x, a.position.y, a.position.z);
+            let (x2, y2, z2) = (b.position.x, b.position.y, b.position.z);
+            let (x3, y3, z3) = (c.position.x, c.position.y, c.position.z);
 
             let min_x = x1.min(x2).min(x3).max(0.0).min(bb.0);
             let max_x = x1.max(x2).max(x3).min(bb.0).max(0.0);
@@ -195,20 +201,54 @@ impl<'a, V, U, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send + Syn
             let min_y = y1.min(y2).min(y3).max(0.0).min(bb.1);
             let max_y = y1.max(y2).max(y3).min(bb.1).max(0.0);
 
-            let mut x = min_x;
+            //let mut x = min_x;
 
-            while x < max_x {
-                let mut y = min_y;
+            //while x < max_x {
+            //    let mut y = min_y;
+            //
+            //    while y < max_y {
+            //        //TODO
+            //        y += 1.0;
+            //    }
+            //
+            //    x += 1.0;
+            //}
 
-                while y < max_y {
-                    //TODO
-                    y += 1.0;
+            unsafe {
+                if framebuffer.check_coordinate(x1 as u32, y1 as u32) {
+                    *framebuffer.pixel_mut(x1 as u32, y1 as u32) = fragment_shader(&a, &self.uniforms);
+                    *framebuffer.depth_mut(x1 as u32, y1 as u32) = z1;
                 }
-
-                x += 1.0;
+                if framebuffer.check_coordinate(x2 as u32, y2 as u32) {
+                    *framebuffer.pixel_mut(x2 as u32, y2 as u32) = fragment_shader(&a, &self.uniforms);
+                    *framebuffer.depth_mut(x2 as u32, y2 as u32) = z2;
+                }
+                if framebuffer.check_coordinate(x3 as u32, y3 as u32) {
+                    *framebuffer.pixel_mut(x3 as u32, y3 as u32) = fragment_shader(&a, &self.uniforms);
+                    *framebuffer.depth_mut(x3 as u32, y3 as u32) = z3;
+                }
             }
 
-            println!("Triangle {:?} with Area {}", ((x1, y1), (x2, y2), (x3, y3)), area)
-        }).count();
+            //println!("Triangle {:?} with Area {}", ((x1, y1, z1), (x2, y2, z2), (x3, y3, z3)), area);
+
+            framebuffer
+        }).collect();
+
+        let blend_func = self.framebuffer.blend_func();
+
+        for pf in partial_framebuffers.into_iter() {
+            let (pcolor, pdepth) = pf.buffers();
+            let (mut fcolor, mut fdepth) = self.framebuffer.buffers_mut();
+
+            let fiter = fcolor.iter_mut().zip(fdepth.iter_mut());
+            let piter = pcolor.iter().zip(pdepth.iter());
+
+            for ((pc, pd), (fc, fd)) in piter.zip(fiter) {
+                if *pd < *fd {
+                    *fd = *pd;
+                    *fc = (**blend_func)(*pc, *fc);
+                }
+            }
+        }
     }
 }
