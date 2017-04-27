@@ -1,10 +1,7 @@
-//! Shader Execution Pipeline
-
 use std::sync::Arc;
 use std::ops::Deref;
 
 use nalgebra::{Point3, Vector2, Vector4};
-use nalgebra::core::coordinates::XYZW;
 
 use rayon::prelude::*;
 use rayon::current_num_threads;
@@ -12,13 +9,37 @@ use rayon::current_num_threads;
 use ::pixel::Pixel;
 use ::mesh::{Mesh, Vertex};
 
-use super::framebuffer::FrameBuffer;
-use super::uniform::BarycentricInterpolation;
+use ::render::geometry::{FaceWinding, ClipVertex, ScreenVertex};
+use ::render::geometry::{winding_order_from_signed_area, triangle_signed_area};
+use ::render::framebuffer::FrameBuffer;
+use ::render::uniform::BarycentricInterpolation;
 
 pub struct Pipeline<U, P> where P: Pixel, U: Send + Sync {
     framebuffer: FrameBuffer<P>,
     uniforms: U,
 }
+
+pub struct VertexShader<'a, V, U, P: 'static> where V: Send + Sync,
+                                                    U: Send + Sync + 'a,
+                                                    P: Pixel {
+    mesh: Arc<Mesh<V>>,
+    uniforms: &'a U,
+    framebuffer: &'a mut FrameBuffer<P>,
+}
+
+pub struct FragmentShader<'a, V, U, K, P: 'static> where V: Send + Sync,
+                                                         U: Send + Sync + 'a,
+                                                         K: Send + Sync + BarycentricInterpolation,
+                                                         P: Pixel {
+    mesh: Arc<Mesh<V>>,
+    uniforms: &'a U,
+    framebuffer: &'a mut FrameBuffer<P>,
+    screen_vertices: Vec<ScreenVertex<K>>,
+    cull_faces: Option<FaceWinding>,
+    blend_func: Box<Fn(P, P) -> P + Send + Sync>,
+}
+
+///////////////////////
 
 impl<U, P> Pipeline<U, P> where U: Send + Sync,
                                 P: Pixel {
@@ -50,48 +71,6 @@ impl<U, P> Pipeline<U, P> where U: Send + Sync,
     pub fn framebuffer_mut(&mut self) -> &mut FrameBuffer<P> { &mut self.framebuffer }
 }
 
-pub struct VertexShader<'a, V, U, P: 'static> where V: Send + Sync,
-                                                    U: Send + Sync + 'a,
-                                                    P: Pixel {
-    mesh: Arc<Mesh<V>>,
-    uniforms: &'a U,
-    framebuffer: &'a mut FrameBuffer<P>,
-}
-
-pub struct ClipVertex<K> where K: Send + Sync + BarycentricInterpolation {
-    pub position: Vector4<f32>,
-    pub uniforms: K,
-}
-
-impl<K> ClipVertex<K> where K: Send + Sync + BarycentricInterpolation {
-    #[inline(always)]
-    pub fn new(position: Vector4<f32>, uniforms: K) -> ClipVertex<K> {
-        ClipVertex { position: position, uniforms: uniforms }
-    }
-
-    pub fn normalize(self, viewport: (f32, f32)) -> ScreenVertex<K> {
-        ScreenVertex {
-            position: {
-                let XYZW { x, y, z, w } = *self.position;
-
-                Vector4::new(
-                    (x / w + 1.0) * (viewport.0 / 2.0),
-                    // Vertical is flipped
-                    (1.0 - y / w) * (viewport.1 / 2.0),
-                    -z,
-                    1.0
-                )
-            },
-            uniforms: self.uniforms,
-        }
-    }
-}
-
-pub struct ScreenVertex<K> where K: Send + Sync + BarycentricInterpolation {
-    pub position: Vector4<f32>,
-    pub uniforms: K,
-}
-
 impl<'a, V, U, P: 'static> VertexShader<'a, V, U, P> where V: Send + Sync,
                                                            U: Send + Sync + 'a,
                                                            P: Pixel {
@@ -110,45 +89,30 @@ impl<'a, V, U, P: 'static> VertexShader<'a, V, U, P> where V: Send + Sync,
             framebuffer: self.framebuffer,
             screen_vertices: screen_vertices,
             cull_faces: None,
+            blend_func: Box::new(|s, _| s),
         }
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FaceWinding {
-    Clockwise,
-    CounterClockwise
-}
-
-pub struct FragmentShader<'a, V, U, K, P: 'static> where V: Send + Sync,
-                                                         U: Send + Sync + 'a,
-                                                         K: Send + Sync + BarycentricInterpolation,
-                                                         P: Pixel {
-    mesh: Arc<Mesh<V>>,
-    uniforms: &'a U,
-    framebuffer: &'a mut FrameBuffer<P>,
-    screen_vertices: Vec<ScreenVertex<K>>,
-    cull_faces: Option<FaceWinding>
-}
-
-#[inline]
-fn triangle_signed_area(x1: f32, y1: f32, x2: f32, y2: f32, x3: f32, y3: f32) -> f32 {
-    0.5 * (-x2 * y1 + 2.0 * x3 * y1 + x1 * y2 - x3 * y2 + 2.0 * x1 * y3 + x2 * y3)
-}
-
-#[inline(always)]
-fn winding_order(area: f32) -> FaceWinding {
-    if area < 0.0 { FaceWinding::Clockwise } else { FaceWinding::CounterClockwise }
 }
 
 impl<'a, V, U, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send + Sync,
                                                                    U: Send + Sync + 'a,
                                                                    K: Send + Sync + BarycentricInterpolation,
                                                                    P: Pixel {
+    #[inline(always)]
+    pub fn cull_faces(&mut self, cull: Option<FaceWinding>) {
+        self.cull_faces = cull;
+    }
+
+    #[inline(always)]
+    pub fn blend_func<F>(&mut self, f: F) where F: Fn(P, P) -> P + Send + Sync + 'static {
+        self.blend_func = Box::new(f);
+    }
+
     pub fn run<S>(mut self, fragment_shader: S) where S: Fn(&ScreenVertex<K>, &U) -> P + Send + Sync {
         println!("Running fragment shader");
 
-        let bb = (self.framebuffer.width() as f32, self.framebuffer.height() as f32);
+        let bb = (self.framebuffer.width() as f32 - 1.0,
+                  self.framebuffer.height() as f32 - 1.0);
 
         let triangles_per_thread = self.mesh.indices.len() / (3 * current_num_threads());
 
@@ -172,7 +136,7 @@ impl<'a, V, U, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send + Syn
                 // otherwise go ahead
                 if let Some(winding) = self.cull_faces {
                     // Check if the winding order matches the desired order
-                    if winding == winding_order(area) {
+                    if winding == winding_order_from_signed_area(area) {
                         Some((triangle, area))
                     } else {
                         None
@@ -186,34 +150,64 @@ impl<'a, V, U, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send + Syn
         }).fold(|| {
             println!("New framebuffer clone");
             self.framebuffer.empty_clone()
-        }, |mut framebuffer, (triangle, area)| {
+        }, |mut framebuffer: FrameBuffer<P>, (triangle, area)| {
             let ref a = self.screen_vertices[triangle[0] as usize];
             let ref b = self.screen_vertices[triangle[1] as usize];
             let ref c = self.screen_vertices[triangle[2] as usize];
 
-            let (x1, y1, z1) = (a.position.x, a.position.y, a.position.z);
-            let (x2, y2, z2) = (b.position.x, b.position.y, b.position.z);
-            let (x3, y3, z3) = (c.position.x, c.position.y, c.position.z);
+            let (x1, y1) = (a.position.x, a.position.y);
+            let (x2, y2) = (b.position.x, b.position.y);
+            let (x3, y3) = (c.position.x, c.position.y);
 
             let min_x = x1.min(x2).min(x3).max(0.0).min(bb.0);
-            let max_x = x1.max(x2).max(x3).min(bb.0).max(0.0);
+            let max_x = x1.max(x2).max(x3).max(0.0).min(bb.0);
 
             let min_y = y1.min(y2).min(y3).max(0.0).min(bb.1);
-            let max_y = y1.max(y2).max(y3).min(bb.1).max(0.0);
+            let max_y = y1.max(y2).max(y3).max(0.0).min(bb.1);
 
-            //let mut x = min_x;
+            let mut y = min_y;
 
-            //while x < max_x {
-            //    let mut y = min_y;
-            //
-            //    while y < max_y {
-            //        //TODO
-            //        y += 1.0;
-            //    }
-            //
-            //    x += 1.0;
-            //}
+            while y < max_y {
+                let mut x = min_x;
 
+                while x < max_x {
+                    {
+                        let x = x.round();
+                        let y = y.round();
+
+                        let (px, py) = (x as u32, y as u32);
+
+                        let denom = (y2 - y3) * (x1 - x3) + (x3 - x2) * (y1 - y3);
+
+                        let u = ((y2 - y3) * (x - x3) + (x3 - x2) * (y - y3)) / denom;
+                        let v = ((y3 - y1) * (x - x3) + (x1 - x3) * (y - y3)) / denom;
+                        let r = 1.0 - u - v;
+
+                        if u >= 0.0 && v >= 0.0 && r >= 0.0 {
+                            let position = a.position * u + b.position * v + c.position * r;
+
+                            let (fc, fd) = unsafe { framebuffer.pixel_depth_mut(px, py) };
+
+                            if position.z < *fd {
+                                let c = fragment_shader(&ScreenVertex {
+                                    position: position,
+                                    uniforms: BarycentricInterpolation::barycentric_interpolate(u, &a.uniforms, v, &b.uniforms, r, &c.uniforms),
+                                }, &self.uniforms);
+
+                                *fc = (*self.blend_func)(c, *fc);
+                                *fd = position.z;
+                            }
+                        }
+                        //}
+                    }
+
+                    x += 1.0;
+                }
+
+                y += 1.0;
+            }
+
+            /*
             unsafe {
                 if framebuffer.check_coordinate(x1 as u32, y1 as u32) {
                     *framebuffer.pixel_mut(x1 as u32, y1 as u32) = fragment_shader(&a, &self.uniforms);
@@ -228,13 +222,12 @@ impl<'a, V, U, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send + Syn
                     *framebuffer.depth_mut(x3 as u32, y3 as u32) = z3;
                 }
             }
+            */
 
             //println!("Triangle {:?} with Area {}", ((x1, y1, z1), (x2, y2, z2), (x3, y3, z3)), area);
 
             framebuffer
         }).collect();
-
-        let blend_func = self.framebuffer.blend_func();
 
         for pf in partial_framebuffers.into_iter() {
             let (pcolor, pdepth) = pf.buffers();
@@ -246,7 +239,7 @@ impl<'a, V, U, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send + Syn
             for ((pc, pd), (fc, fd)) in piter.zip(fiter) {
                 if *pd < *fd {
                     *fd = *pd;
-                    *fc = (**blend_func)(*pc, *fc);
+                    *fc = (*self.blend_func)(*pc, *fc);
                 }
             }
         }

@@ -1,10 +1,11 @@
 //! Rendering pipeline implementation
 
+pub mod geometry;
 pub mod framebuffer;
-pub mod rasterize;
 pub mod uniform;
-pub mod shading;
+pub mod pipeline;
 
+pub use self::geometry::{FaceWinding, ClipVertex, ScreenVertex};
 pub use self::framebuffer::FrameBuffer;
-pub use self::shading::{ClipVertex, ScreenVertex};
-pub use self::shading::Pipeline as ShadingPipeline;
+pub use self::uniform::{BarycentricInterpolation, barycentric_interpolate};
+pub use self::pipeline::{Pipeline, VertexShader, FragmentShader};
