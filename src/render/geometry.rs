@@ -101,8 +101,7 @@ impl<K> ClipVertex<K> where K: Send + Sync + Barycentric {
                     (x / w + 1.0) * (viewport.0 / 2.0),
                     // Vertical is flipped
                     (1.0 - y / w) * (viewport.1 / 2.0),
-                    -z,
-                    1.0
+                    z, w
                 )
             },
             uniforms: self.uniforms,
