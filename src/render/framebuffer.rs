@@ -11,7 +11,6 @@ pub struct FrameBuffer<P: Pixel> {
     height: u32,
     depth: Vec<f32>,
     color: Vec<P>,
-    blend_func: Arc<Box<Fn(P, P) -> P + Send + Sync>>,
     viewport: (f32, f32),
 }
 
@@ -31,7 +30,6 @@ impl<P: Pixel> FrameBuffer<P> {
             height: height,
             depth: vec![DEFAULT_DEPTH_VALUE; len],
             color: vec![pixel; len],
-            blend_func: Arc::new(Box::new(|s, _| s)),
             viewport: (width as f32, height as f32)
         }
     }
@@ -44,7 +42,6 @@ impl<P: Pixel> FrameBuffer<P> {
             height: self.height,
             depth: vec![DEFAULT_DEPTH_VALUE; len],
             color: vec![P::empty(); len],
-            blend_func: self.blend_func.clone(),
             viewport: self.viewport
         }
     }
@@ -97,15 +94,6 @@ impl<P: Pixel> FrameBuffer<P> {
     #[inline(always)]
     pub fn height(&self) -> u32 { self.height }
 
-    pub fn blend_func(&self) -> Arc<Box<Fn(P, P) -> P + Send + Sync>> {
-        self.blend_func.clone()
-    }
-
-    /// Set the pixel blend function
-    pub fn set_blend_function<F>(&mut self, f: F) where F: Fn(P, P) -> P + Send + Sync + 'static {
-        self.blend_func = Arc::new(Box::new(f))
-    }
-
     /// Check if some x and y coordinate is a valid pixel coordinate
     #[inline(always)]
     pub fn check_coordinate(&self, x: u32, y: u32) -> bool {
@@ -146,5 +134,11 @@ impl<P: Pixel> FrameBuffer<P> {
     #[inline]
     pub unsafe fn depth_mut(&mut self, x: u32, y: u32) -> &mut f32 {
         self.depth.get_unchecked_mut(x as usize + y as usize * self.width as usize)
+    }
+
+    #[inline]
+    pub unsafe fn pixel_depth_mut(&mut self, x: u32, y: u32) -> (&mut P, &mut f32) {
+        let i = x as usize + y as usize * self.width as usize;
+        (self.color.get_unchecked_mut(i), self.depth.get_unchecked_mut(i))
     }
 }
