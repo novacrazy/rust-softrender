@@ -1,4 +1,5 @@
 extern crate nalgebra;
+#[macro_use]
 extern crate softrender;
 
 use std::sync::Arc;
@@ -7,7 +8,7 @@ use nalgebra::{Point3, Vector4, Vector3};
 
 use softrender::pixel::RGBAf32Pixel;
 use softrender::mesh::{Mesh, Vertex};
-use softrender::render::{FrameBuffer, ShadingPipeline, ClipVertex, ScreenVertex};
+use softrender::render::{FrameBuffer, Pipeline, ClipVertex, ScreenVertex};
 use softrender::image_compat::ImageFrameBuffer;
 
 fn get_cube() -> Arc<Mesh<()>> {
@@ -48,7 +49,7 @@ fn get_cube() -> Arc<Mesh<()>> {
                         Point3::new(0.820, 0.883, 0.371),
                         Point3::new(0.982, 0.099, 0.879)];
 
-    let indices = vertices.iter().enumerate().map(|(i, _)| i as u32).collect();
+    let indices = (0..vertices.len()).map(|i| i as u32).collect();
 
     Arc::new(Mesh {
         vertices: vertices.into_iter().map(|vertex| Vertex { position: vertex, vertex_data: () }).collect(),
@@ -57,21 +58,12 @@ fn get_cube() -> Arc<Mesh<()>> {
 }
 
 fn main() {
-    let mut framebuffer = FrameBuffer::<RGBAf32Pixel>::new_with(1000, 1000, RGBAf32Pixel { r: 1.0, g: 1.0, b: 1.0, a: 1.0 });
-
-    framebuffer.set_blend_function(|a, b| {
-        RGBAf32Pixel {
-            r: a.r * a.a + b.r * (1.0 - a.a),
-            g: a.g * a.a + b.g * (1.0 - a.a),
-            b: a.b * a.a + b.b * (1.0 - a.a),
-            a: a.a + b.a,
-        }
-    });
+    let framebuffer = FrameBuffer::<RGBAf32Pixel>::new_with(1000, 1000, RGBAf32Pixel { r: 1.0, g: 1.0, b: 1.0, a: 1.0 });
 
     let cube = get_cube();
 
     let view = nalgebra::Isometry3::look_at_rh(
-        &Point3::new(5.0, 5.0, 5.0),
+        &Point3::new(1.0, 1.0, 1.0),
         &Point3::origin(),
         &Vector3::new(0.0, 1.0, 0.0)
     ).to_homogeneous();
@@ -79,19 +71,44 @@ fn main() {
     let projection = nalgebra::Perspective3::new(framebuffer.width() as f32 / framebuffer.height() as f32,
                                                  75.0f32.to_radians(), 0.001, 1000.0).to_homogeneous();
 
-    let mut pipeline = ShadingPipeline::new(framebuffer, ());
+    let mut pipeline = Pipeline::new(framebuffer, ());
 
     {
         let vertex_shader = pipeline.render_mesh(cube.clone());
 
-        let fragment_shader = vertex_shader.run(|vertex, _| {
-            let position = projection * view * vertex.position.to_homogeneous();
-            ClipVertex::new(position, 0.0)
+        declare_uniforms! {
+            Uniforms {
+                position: Vector4<f32>,
+            }
+        }
+
+        let mut fragment_shader = vertex_shader.run(|vertex, _| {
+            let world_position = vertex.position.to_homogeneous();
+
+            let position = projection * view * world_position;
+
+            ClipVertex::new(position, Uniforms {
+                position: world_position,
+            })
         });
 
-        fragment_shader.run(|position, _| {
+        fragment_shader.set_blend_function(|a, b| {
+            let sa = a.a;
+            let da = 1.0 - sa;
+
+            RGBAf32Pixel {
+                r: a.r * sa + b.r * da,
+                g: a.g * sa + b.g * da,
+                b: a.b * sa + b.b * da,
+                a: a.a * sa + b.a * da,
+            }
+        });
+
+        fragment_shader.run(|screen_vertex, _| {
+            let Uniforms { position } = screen_vertex.uniforms;
+
             // Determine the color of the pixel here
-            RGBAf32Pixel { r: 0.0, g: 0.0, b: 0.0, a: 1.0 }
+            RGBAf32Pixel { r: position.x, g: position.y, b: position.z, a: 1.0 }
         });
     }
 
