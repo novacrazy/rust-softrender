@@ -1,9 +1,8 @@
 //! Generic mesh structure
 
 use std::fmt::{Debug, Formatter, Result as FmtResult};
-use std::sync::Arc;
 
-use nalgebra::{Point3, Vector2, Vector3, Vector4};
+use nalgebra::Point3;
 
 /// A single vertex with a required position vector and any other vertex data
 #[derive(Debug, Clone)]

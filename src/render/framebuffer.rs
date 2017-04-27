@@ -1,5 +1,4 @@
 //! Minimalist framebuffer structure with an emphasis on performance
-use std::sync::Arc;
 
 use ::pixel::Pixel;
 
