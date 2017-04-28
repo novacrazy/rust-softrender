@@ -115,13 +115,3 @@ impl<K> ScreenVertex<K> where K: Send + Sync + Barycentric {
         ScreenVertex { position: position, uniforms: uniforms }
     }
 }
-
-#[inline]
-pub fn triangle_signed_area(x1: f32, y1: f32, x2: f32, y2: f32, x3: f32, y3: f32) -> f32 {
-    0.5 * (-x2 * y1 + 2.0 * x3 * y1 + x1 * y2 - x3 * y2 + 2.0 * x1 * y3 + x2 * y3)
-}
-
-#[inline(always)]
-pub fn winding_order_from_signed_area(area: f32) -> FaceWinding {
-    if area.is_sign_negative() { FaceWinding::Clockwise } else { FaceWinding::CounterClockwise }
-}
