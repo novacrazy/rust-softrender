@@ -5,11 +5,11 @@ use rayon::current_num_threads;
 
 use nalgebra::coordinates::XYZW;
 
+use ::utils::clamp;
 use ::pixel::Pixel;
 use ::mesh::{Mesh, Vertex};
 
 use ::render::geometry::{FaceWinding, ClipVertex, ScreenVertex};
-use ::render::geometry::{winding_order_from_signed_area, triangle_signed_area};
 use ::render::framebuffer::FrameBuffer;
 use ::render::uniform::Barycentric;
 
@@ -143,19 +143,19 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
         let bb = (self.framebuffer.width() as f32,
                   self.framebuffer.height() as f32);
 
-        let partial_framebuffers: Vec<FrameBuffer<P>> = self.mesh.indices.par_iter().cloned().with_min_len(points_per_thread).fold(
-            || { self.framebuffer.empty_clone() },
-            |mut framebuffer: FrameBuffer<P>, index| {
+        let partial_framebuffers = self.mesh.indices.par_iter().cloned().with_min_len(points_per_thread).fold(
+            || { self.framebuffer.empty_clone() }, |mut framebuffer: FrameBuffer<P>, index| {
                 let ref vertex = self.screen_vertices[index as usize];
 
                 let XYZW { x, y, z, .. } = *vertex.position;
 
-                if 0.0 <= x && x < bb.0 && 0.0 <= y && y < bb.1 {
-                    let x = x.floor() as u32;
-                    let y = y.floor() as u32;
+                // don't render pixels "behind" or outside of the camera view
+                if 0.0 <= x && x < bb.0 && 0.0 <= y && y < bb.1 && z > 0.0 {
+                    let px = x as u32;
+                    let py = y as u32;
 
-                    if framebuffer.check_coordinate(x, y) {
-                        let (fc, fd) = unsafe { framebuffer.pixel_depth_mut(x, y) };
+                    if framebuffer.check_coordinate(px, py) {
+                        let (fc, fd) = unsafe { framebuffer.pixel_depth_mut(px, py) };
 
                         if z < *fd {
                             let c = fragment_shader(vertex, &self.uniforms);
@@ -173,34 +173,32 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
     }
 
     pub fn triangles<S>(mut self, fragment_shader: S) where S: Fn(&ScreenVertex<K>, &U) -> P + Send + Sync {
-        println!("Running fragment shader");
-
         let bb = (self.framebuffer.width() as f32 - 1.0,
                   self.framebuffer.height() as f32 - 1.0);
 
         let triangles_per_thread = self.mesh.indices.len() / (3 * current_num_threads());
 
-        let partial_framebuffers: Vec<FrameBuffer<P>> = self.mesh.indices.par_chunks(3).with_min_len(triangles_per_thread).filter_map(|triangle| {
+        let partial_framebuffers = self.mesh.indices.par_chunks(3).with_min_len(triangles_per_thread).filter_map(|triangle| {
             // if there are three points at all, go ahead
             if triangle.len() == 3 {
-                //println!("Triangle {:?}", triangle);
-
-                let ref a = self.screen_vertices[triangle[0] as usize];
-                let ref b = self.screen_vertices[triangle[1] as usize];
-                let ref c = self.screen_vertices[triangle[2] as usize];
-
                 //TODO: Check if triangle is on screen at all.
-
-                let area = triangle_signed_area(a.position.x, a.position.y,
-                                                b.position.x, b.position.y,
-                                                c.position.x, c.position.y);
 
                 // If there is a winding order for culling,
                 // compare it to the triangle winding order,
                 // otherwise go ahead
                 if let Some(winding) = self.cull_faces {
+                    let ref a = self.screen_vertices[triangle[0] as usize];
+                    let ref b = self.screen_vertices[triangle[1] as usize];
+                    let ref c = self.screen_vertices[triangle[2] as usize];
+
+                    let (x1, y1) = (a.position.x, a.position.y);
+                    let (x2, y2) = (b.position.x, b.position.y);
+                    let (x3, y3) = (c.position.x, c.position.y);
+
+                    let area2 = -x2 * y1 + 2.0 * x3 * y1 + x1 * y2 - x3 * y2 + 2.0 * x1 * y3 + x2 * y3;
+
                     // Check if the winding order matches the desired order
-                    if winding == winding_order_from_signed_area(area) {
+                    if winding == if area2.is_sign_negative() { FaceWinding::Clockwise } else { FaceWinding::CounterClockwise } {
                         Some(triangle)
                     } else {
                         None
@@ -211,10 +209,7 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
             } else {
                 None
             }
-        }).fold(|| {
-            println!("New framebuffer clone");
-            self.framebuffer.empty_clone()
-        }, |mut framebuffer: FrameBuffer<P>, triangle| {
+        }).fold(|| { self.framebuffer.empty_clone() }, |mut framebuffer: FrameBuffer<P>, triangle| {
             let ref a = self.screen_vertices[triangle[0] as usize];
             let ref b = self.screen_vertices[triangle[1] as usize];
             let ref c = self.screen_vertices[triangle[2] as usize];
@@ -223,11 +218,13 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
             let (x2, y2) = (b.position.x, b.position.y);
             let (x3, y3) = (c.position.x, c.position.y);
 
-            let min_x = x1.min(x2).min(x3).max(0.0).min(bb.0);
-            let max_x = x1.max(x2).max(x3).max(0.0).min(bb.0);
+            // find x bounds for the bounding box
+            let min_x = clamp(x1.min(x2).min(x3).floor(), 0.0, bb.0);
+            let max_x = clamp(x1.max(x2).max(x3).ceil(), 0.0, bb.0);
 
-            let min_y = y1.min(y2).min(y3).max(0.0).min(bb.1);
-            let max_y = y1.max(y2).max(y3).max(0.0).min(bb.1);
+            // find y bounds for the bounding box
+            let min_y = clamp(y1.min(y2).min(y3).floor(), 0.0, bb.1);
+            let max_y = clamp(y1.max(y2).max(y3).ceil(), 0.0, bb.1);
 
             let mut y = min_y;
 
@@ -235,29 +232,37 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
                 let mut x = min_x;
 
                 while x <= max_x {
-                    {
-                        let x = x.floor();
-                        let y = y.floor();
+                    let (px, py) = (x as u32, y as u32);
 
-                        let (px, py) = (x as u32, y as u32);
+                    // calculate determinant
+                    let det = (y2 - y3) * (x1 - x3) + (x3 - x2) * (y1 - y3);
 
-                        let denom = (y2 - y3) * (x1 - x3) + (x3 - x2) * (y1 - y3);
+                    // calculate barycentric coordinates of the current point
+                    let u = ((y2 - y3) * (x - x3) + (x3 - x2) * (y - y3)) / det;
+                    let v = ((y3 - y1) * (x - x3) + (x1 - x3) * (y - y3)) / det;
+                    let r = 1.0 - u - v;
 
-                        let u = ((y2 - y3) * (x - x3) + (x3 - x2) * (y - y3)) / denom;
-                        let v = ((y3 - y1) * (x - x3) + (x1 - x3) * (y - y3)) / denom;
-                        let r = 1.0 - u - v;
+                    // check if the point is inside the triangle at all
+                    if u >= 0.0 && v >= 0.0 && r >= 0.0 {
+                        // interpolate screen-space position
+                        let position = a.position * u + b.position * v + c.position * r;
 
-                        if u >= 0.0 && v >= 0.0 && r >= 0.0 {
-                            let position = a.position * u + b.position * v + c.position * r;
-
+                        // don't render pixels "behind" the camera
+                        if position.z > 0.0 {
                             let (fc, fd) = unsafe { framebuffer.pixel_depth_mut(px, py) };
 
+                            // skip fragments that are behind over previous fragments
                             if position.z < *fd {
+                                // run fragment shader
                                 let c = fragment_shader(&ScreenVertex {
                                     position: position,
-                                    uniforms: Barycentric::interpolate(u, &a.uniforms, v, &b.uniforms, r, &c.uniforms),
+                                    // interpolate the uniforms
+                                    uniforms: Barycentric::interpolate(u, &a.uniforms,
+                                                                       v, &b.uniforms,
+                                                                       r, &c.uniforms),
                                 }, &self.uniforms);
 
+                                // blend pixels together and set the new depth value
                                 *fc = (*self.blend_func)(c, *fc);
                                 *fd = position.z;
                             }
@@ -269,25 +274,6 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
 
                 y += 1.0;
             }
-
-            /*
-            unsafe {
-                if framebuffer.check_coordinate(x1 as u32, y1 as u32) {
-                    *framebuffer.pixel_mut(x1 as u32, y1 as u32) = fragment_shader(&a, &self.uniforms);
-                    *framebuffer.depth_mut(x1 as u32, y1 as u32) = z1;
-                }
-                if framebuffer.check_coordinate(x2 as u32, y2 as u32) {
-                    *framebuffer.pixel_mut(x2 as u32, y2 as u32) = fragment_shader(&a, &self.uniforms);
-                    *framebuffer.depth_mut(x2 as u32, y2 as u32) = z2;
-                }
-                if framebuffer.check_coordinate(x3 as u32, y3 as u32) {
-                    *framebuffer.pixel_mut(x3 as u32, y3 as u32) = fragment_shader(&a, &self.uniforms);
-                    *framebuffer.depth_mut(x3 as u32, y3 as u32) = z3;
-                }
-            }
-            */
-
-            //println!("Triangle {:?} with Area {}", ((x1, y1, z1), (x2, y2, z2), (x3, y3, z3)), area);
 
             framebuffer
         }).collect();
