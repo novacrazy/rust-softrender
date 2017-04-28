@@ -44,6 +44,9 @@ impl<U, P> Pipeline<U, P> where U: Send + Sync,
                                 P: Pixel {
     /// Create a new rendering pipeline instance
     pub fn new(framebuffer: FrameBuffer<P>, uniforms: U) -> Pipeline<U, P> {
+        assert!(framebuffer.width() > 0, "Framebuffer must have a non-zero width");
+        assert!(framebuffer.height() > 0, "Framebuffer must have a non-zero height");
+
         Pipeline {
             framebuffer: framebuffer,
             uniforms: uniforms,
@@ -75,8 +78,6 @@ impl<'a, V, U: 'a, P: 'static> VertexShader<'a, V, U, P> where V: Send + Sync,
                                                                P: Pixel {
     pub fn run<S, K>(self, vertex_shader: S) -> FragmentShader<'a, V, U, K, P> where S: Fn(&Vertex<V>, &U) -> ClipVertex<K> + Sync,
                                                                                      K: Send + Sync + Barycentric {
-        println!("Running vertex shader");
-
         let screen_vertices = self.mesh.vertices.par_iter().map(|vertex| {
             vertex_shader(vertex, &*self.uniforms)
                 .normalize(self.framebuffer.viewport())
@@ -91,6 +92,11 @@ impl<'a, V, U: 'a, P: 'static> VertexShader<'a, V, U, P> where V: Send + Sync,
             blend_func: Box::new(|s, _| s),
         }
     }
+}
+
+pub enum Fragment<P> where P: Sized + Pixel {
+    Discard,
+    Color(P)
 }
 
 impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send + Sync,
@@ -111,7 +117,7 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
     /// The second parameter passed to the blend function is the existing value in the framebuffer to blend over.
     ///
     /// You can use the tool [Here](http://www.andersriggelsen.dk/glblendfunc.php) to see how OpenGL does blending,
-    /// and choose how you want to blend functions.
+    /// and choose how you want to blend pixels.
     ///
     /// For a generic alpha-over blend function, check the Wikipedia article [Here](https://en.wikipedia.org/wiki/Alpha_compositing)
     /// for the *over* color function.
@@ -129,7 +135,7 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
             let piter = pcolor.iter().zip(pdepth.iter());
 
             for ((pc, pd), (fc, fd)) in piter.zip(fiter) {
-                if *pd < *fd {
+                if *fd < *pd {
                     *fd = *pd;
                     *fc = (*self.blend_func)(*pc, *fc);
                 }
@@ -137,7 +143,7 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
         }
     }
 
-    pub fn points<S>(mut self, fragment_shader: S) where S: Fn(&ScreenVertex<K>, &U) -> P + Send + Sync {
+    pub fn points<S>(mut self, fragment_shader: S) where S: Fn(&ScreenVertex<K>, &U) -> Fragment<P> + Send + Sync {
         let points_per_thread = self.mesh.indices.len() / current_num_threads();
 
         let bb = (self.framebuffer.width() as f32,
@@ -150,18 +156,21 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
                 let XYZW { x, y, z, .. } = *vertex.position;
 
                 // don't render pixels "behind" or outside of the camera view
-                if 0.0 <= x && x < bb.0 && 0.0 <= y && y < bb.1 && z > 0.0 {
+                if 0.0 <= x && x < bb.0 && 0.0 <= y && y < bb.1 && z < 0.0 {
                     let px = x as u32;
                     let py = y as u32;
 
                     if framebuffer.check_coordinate(px, py) {
                         let (fc, fd) = unsafe { framebuffer.pixel_depth_mut(px, py) };
 
-                        if z < *fd {
-                            let c = fragment_shader(vertex, &self.uniforms);
-
-                            *fc = (*self.blend_func)(c, *fc);
-                            *fd = z;
+                        if z > *fd {
+                            match fragment_shader(vertex, &self.uniforms) {
+                                Fragment::Color(c) => {
+                                    *fc = (*self.blend_func)(c, *fc);
+                                    *fd = z;
+                                }
+                                Fragment::Discard => ()
+                            };
                         }
                     }
                 }
@@ -172,13 +181,71 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
         self.merge_framebuffers(partial_framebuffers)
     }
 
-    pub fn triangles<S>(mut self, fragment_shader: S) where S: Fn(&ScreenVertex<K>, &U) -> P + Send + Sync {
-        let bb = (self.framebuffer.width() as f32 - 1.0,
-                  self.framebuffer.height() as f32 - 1.0);
+    pub fn wireframe<S>(mut self, fragment_shader: S) where S: Fn(&ScreenVertex<K>, &U) -> Fragment<P> + Send + Sync {
+        let triangles_per_thread = self.mesh.indices.len() / (3 * current_num_threads());
+
+        let partial_framebuffers = self.mesh.indices.par_chunks(3).with_min_len(triangles_per_thread).filter(|triangle| triangle.len() == 3).fold(
+            || { self.framebuffer.empty_clone() }, |mut framebuffer: FrameBuffer<P>, triangle| {
+                let ref a = self.screen_vertices[triangle[0] as usize];
+                let ref b = self.screen_vertices[triangle[1] as usize];
+                let ref c = self.screen_vertices[triangle[2] as usize];
+
+                for &(a, b, c) in &[(a, b, c), (b, c, a), (c, a, b)] {
+                    let (x1, y1) = (a.position.x, a.position.y);
+                    let (x2, y2) = (b.position.x, b.position.y);
+
+                    let d = (x1 - x2).hypot(y1 - y2);
+
+                    ::render::line::draw_line_xiaolin_wu(x1 as f64, y1 as f64, x2 as f64, y2 as f64, |x, y, alpha| {
+                        if x >= 0 && y >= 0 {
+                            let x = x as u32;
+                            let y = y as u32;
+
+                            let d1 = (x1 - x as f32).hypot(y1 - y as f32);
+
+                            let t = d1 / d;
+
+                            let position = a.position * (1.0 - t) + b.position * t;
+
+                            if position.z < 0.0 {
+                                if framebuffer.check_coordinate(x, y) {
+                                    let (fc, fd) = unsafe { framebuffer.pixel_depth_mut(x, y) };
+
+                                    if position.z > *fd {
+                                        // run fragment shader
+                                        let fragment = fragment_shader(&ScreenVertex {
+                                            position: position,
+                                            uniforms: Barycentric::interpolate((1.0 - t), &a.uniforms, t, &b.uniforms, 0.0, &c.uniforms),
+                                        }, &self.uniforms);
+
+                                        match fragment {
+                                            Fragment::Color(c) => {
+                                                // blend pixels together and set the new depth value
+                                                *fc = (*self.blend_func)(c.with_alpha(alpha as f32), *fc);
+                                                *fd = 0.0;
+                                            }
+                                            Fragment::Discard => ()
+                                        };
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+
+                framebuffer
+            }).collect();
+
+        self.merge_framebuffers(partial_framebuffers)
+    }
+
+    pub fn triangles<S>(mut self, fragment_shader: S) where S: Fn(&ScreenVertex<K>, &U) -> Fragment<P> + Send + Sync {
+        let bb = (self.framebuffer.width() - 1,
+                  self.framebuffer.height() - 1);
 
         let triangles_per_thread = self.mesh.indices.len() / (3 * current_num_threads());
 
-        let partial_framebuffers = self.mesh.indices.par_chunks(3).with_min_len(triangles_per_thread).filter_map(|triangle| {
+        let partial_framebuffers = self.mesh.indices.par_chunks(3).with_min_len(triangles_per_thread).filter(|triangle| {
             // if there are three points at all, go ahead
             if triangle.len() == 3 {
                 //TODO: Check if triangle is on screen at all.
@@ -199,15 +266,15 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
 
                     // Check if the winding order matches the desired order
                     if winding == if area2.is_sign_negative() { FaceWinding::Clockwise } else { FaceWinding::CounterClockwise } {
-                        Some(triangle)
+                        true
                     } else {
-                        None
+                        false
                     }
                 } else {
-                    Some(triangle)
+                    true
                 }
             } else {
-                None
+                false
             }
         }).fold(|| { self.framebuffer.empty_clone() }, |mut framebuffer: FrameBuffer<P>, triangle| {
             let ref a = self.screen_vertices[triangle[0] as usize];
@@ -219,20 +286,22 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
             let (x3, y3) = (c.position.x, c.position.y);
 
             // find x bounds for the bounding box
-            let min_x = clamp(x1.min(x2).min(x3).floor(), 0.0, bb.0);
-            let max_x = clamp(x1.max(x2).max(x3).ceil(), 0.0, bb.0);
+            let min_x: u32 = clamp(x1.min(x2).min(x3).floor() as u32, 0, bb.0);
+            let max_x: u32 = clamp(x1.max(x2).max(x3).ceil() as u32, 0, bb.0);
 
             // find y bounds for the bounding box
-            let min_y = clamp(y1.min(y2).min(y3).floor(), 0.0, bb.1);
-            let max_y = clamp(y1.max(y2).max(y3).ceil(), 0.0, bb.1);
+            let min_y: u32 = clamp(y1.min(y2).min(y3).floor() as u32, 0, bb.1);
+            let max_y: u32 = clamp(y1.max(y2).max(y3).ceil() as u32, 0, bb.1);
 
-            let mut y = min_y;
+            let mut py = min_y;
 
-            while y <= max_y {
-                let mut x = min_x;
+            while py <= max_y {
+                let mut px = min_x;
 
-                while x <= max_x {
-                    let (px, py) = (x as u32, y as u32);
+                while px <= max_x {
+                    // Real screen position should be in the center of the pixel.
+                    let (x, y) = (px as f32 + 0.5,
+                                  py as f32 + 0.5);
 
                     // calculate determinant
                     let det = (y2 - y3) * (x1 - x3) + (x3 - x2) * (y1 - y3);
@@ -248,13 +317,13 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
                         let position = a.position * u + b.position * v + c.position * r;
 
                         // don't render pixels "behind" the camera
-                        if position.z > 0.0 {
+                        if position.z < 0.0 {
                             let (fc, fd) = unsafe { framebuffer.pixel_depth_mut(px, py) };
 
                             // skip fragments that are behind over previous fragments
-                            if position.z < *fd {
+                            if position.z > *fd {
                                 // run fragment shader
-                                let c = fragment_shader(&ScreenVertex {
+                                let fragment = fragment_shader(&ScreenVertex {
                                     position: position,
                                     // interpolate the uniforms
                                     uniforms: Barycentric::interpolate(u, &a.uniforms,
@@ -262,17 +331,22 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
                                                                        r, &c.uniforms),
                                 }, &self.uniforms);
 
-                                // blend pixels together and set the new depth value
-                                *fc = (*self.blend_func)(c, *fc);
-                                *fd = position.z;
+                                match fragment {
+                                    Fragment::Color(c) => {
+                                        // blend pixels together and set the new depth value
+                                        *fc = (*self.blend_func)(c, *fc);
+                                        *fd = position.z;
+                                    }
+                                    Fragment::Discard => ()
+                                };
                             }
                         }
                     }
 
-                    x += 1.0;
+                    px += 1;
                 }
 
-                y += 1.0;
+                py += 1;
             }
 
             framebuffer

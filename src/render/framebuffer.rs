@@ -13,7 +13,11 @@ pub struct FrameBuffer<P: Pixel> {
     viewport: (f32, f32),
 }
 
-pub const DEFAULT_DEPTH_VALUE: f32 = 1000000.0;
+/// Default depth value, equal to the farthest away anything can be.
+///
+/// Note that due to how floating point numbers work,
+/// depth values become less precise the farther away the object is.
+pub const DEFAULT_DEPTH_VALUE: f32 = ::std::f32::MIN;
 
 impl<P: Pixel> FrameBuffer<P> {
     /// Create a new framebuffer with the default pixel.
@@ -33,6 +37,8 @@ impl<P: Pixel> FrameBuffer<P> {
         }
     }
 
+    /// Create a clone of the framebuffer with all the same properties but with pixels
+    /// being `Pixel::empty()` and with the `DEFAULT_DEPTH_VALUE` in the depth buffer
     pub fn empty_clone(&self) -> FrameBuffer<P> {
         let len = self.width as usize * self.height as usize;
 
@@ -135,6 +141,10 @@ impl<P: Pixel> FrameBuffer<P> {
         self.depth.get_unchecked_mut(x as usize + y as usize * self.width as usize)
     }
 
+    /// Get a mutable reference to both the depth and color values at the given coordinate.
+    ///
+    /// No bounds checking is performed for performance reasons,
+    /// so bounds should be checked elsewhere.
     #[inline]
     pub unsafe fn pixel_depth_mut(&mut self, x: u32, y: u32) -> (&mut P, &mut f32) {
         let i = x as usize + y as usize * self.width as usize;
