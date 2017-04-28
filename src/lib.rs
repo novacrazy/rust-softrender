@@ -6,6 +6,7 @@ extern crate rayon;
 #[cfg(feature = "image_compat")]
 extern crate image;
 
+pub mod utils;
 pub mod pixel;
 pub mod mesh;
 pub mod render;
