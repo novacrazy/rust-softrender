@@ -213,7 +213,7 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
 
                             let position = a.position * (1.0 - t) + b.position * t;
 
-                            /// Don't render pixels "behind" the camera
+                            // Don't render pixels "behind" the camera
                             if position.z > 0.0 {
                                 if framebuffer.check_coordinate(x, y) {
                                     let (fc, fd) = unsafe { framebuffer.pixel_depth_mut(x, y) };
