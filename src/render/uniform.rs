@@ -8,19 +8,19 @@ use std::ops::{Add, Mul};
 ///
 /// See [This document](https://classes.soe.ucsc.edu/cmps160/Fall10/resources/barycentricInterpolation.pdf) for more information
 pub trait Barycentric {
-    fn interpolate(a1: f32, x1: &Self, a2: f32, x2: &Self, a3: f32, x3: &Self) -> Self;
+    fn interpolate(u: f32, x1: &Self, v: f32, x2: &Self, r: f32, x3: &Self) -> Self;
 }
 
 #[inline(always)]
-pub fn barycentric_interpolate<T>(a1: f32, x1: T, a2: f32, x2: T, a3: f32, x3: T) -> T
+pub fn barycentric_interpolate<T>(u: f32, ux: T, v: f32, vx: T, r: f32, rx: T) -> T
     where T: Add<Output=T> + Add<f32, Output=T> + Mul<f32, Output=T> {
-    x1 * a1 + x2 * a2 + x3 * a3
+    ux * u + vx * v + rx * r
 }
 
 impl Barycentric for f32 {
     #[inline(always)]
-    fn interpolate(a1: f32, x1: &Self, a2: f32, x2: &Self, a3: f32, x3: &Self) -> Self {
-        barycentric_interpolate(a1, *x1, a2, *x2, a3, *x3)
+    fn interpolate(u: f32, ux: &Self, v: f32, vx: &Self, r: f32, rx: &Self) -> Self {
+        barycentric_interpolate(u, *ux, v, *vx, r, *rx)
     }
 }
 
@@ -32,10 +32,12 @@ macro_rules! declare_uniforms {
         }
 
         impl $crate::render::Barycentric for $name {
-            fn interpolate(a1: f32, x1: &Self, a2: f32, x2: &Self, a3: f32, x3: &Self) -> Self {
+            fn interpolate(u: f32, ux: &Self, v: f32, vx: &Self, r: f32, rx: &Self) -> Self {
                 $name {
                     $(
-                        $field: $crate::render::Barycentric::interpolate(a1, &x1.$field, a2, &x2.$field, a3, &x3.$field)
+                        $field: $crate::render::Barycentric::interpolate(u, &ux.$field,
+                                                                         v, &vx.$field,
+                                                                         r, &rx.$field)
                     ),*
                 }
             }
@@ -58,14 +60,14 @@ pub mod nalgebra_uniforms {
                 where S: OwnedStorage<f32, $R, $C>,
                       S::Alloc: OwnedAllocator<f32, $R, $C, S> {
                 #[inline]
-                fn interpolate(a1: f32, x1: &Self, a2: f32, x2: &Self, a3: f32, x3: &Self) -> Self {
+                fn interpolate(u: f32, ux: &Self, v: f32, vx: &Self, r: f32, rx: &Self) -> Self {
                     unsafe {
                         let mut res = Self::new_uninitialized();
 
                         $(
-                            *res.get_unchecked_mut($irow, $icol) = *x1.get_unchecked($irow, $icol) * a1 +
-                                                                   *x2.get_unchecked($irow, $icol) * a2 +
-                                                                   *x3.get_unchecked($irow, $icol) * a3;
+                            *res.get_unchecked_mut($irow, $icol) = *ux.get_unchecked($irow, $icol) * u +
+                                                                   *vx.get_unchecked($irow, $icol) * v +
+                                                                   *rx.get_unchecked($irow, $icol) * r;
                         )*
 
                         res
