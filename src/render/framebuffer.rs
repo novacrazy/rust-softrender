@@ -17,7 +17,7 @@ pub struct FrameBuffer<P: Pixel> {
 ///
 /// Note that due to how floating point numbers work,
 /// depth values become less precise the farther away the object is.
-pub const DEFAULT_DEPTH_VALUE: f32 = ::std::f32::MIN;
+pub const DEFAULT_DEPTH_VALUE: f32 = ::std::f32::MAX;
 
 impl<P: Pixel> FrameBuffer<P> {
     /// Create a new framebuffer with the default pixel.
@@ -45,7 +45,7 @@ impl<P: Pixel> FrameBuffer<P> {
         FrameBuffer {
             width: self.width,
             height: self.height,
-            depth: vec![DEFAULT_DEPTH_VALUE; len],
+            depth: self.depth.clone(),
             color: vec![P::empty(); len],
             viewport: self.viewport
         }

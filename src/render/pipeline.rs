@@ -24,6 +24,7 @@ pub struct VertexShader<'a, V, U: 'a, P: 'static> where V: Send + Sync,
     mesh: Arc<Mesh<V>>,
     uniforms: &'a U,
     framebuffer: &'a mut FrameBuffer<P>,
+    near_far: (f32, f32)
 }
 
 pub struct FragmentShader<'a, V, U: 'a, K, P: 'static> where V: Send + Sync,
@@ -54,11 +55,12 @@ impl<U, P> Pipeline<U, P> where U: Send + Sync,
     }
 
     /// Start the shading pipeline for a given mesh
-    pub fn render_mesh<V>(&mut self, mesh: Arc<Mesh<V>>) -> VertexShader<V, U, P> where V: Send + Sync {
+    pub fn render_mesh<V>(&mut self, near_far: (f32, f32), mesh: Arc<Mesh<V>>) -> VertexShader<V, U, P> where V: Send + Sync {
         VertexShader {
             mesh: mesh,
             uniforms: &self.uniforms,
             framebuffer: &mut self.framebuffer,
+            near_far: near_far,
         }
     }
 
@@ -80,7 +82,7 @@ impl<'a, V, U: 'a, P: 'static> VertexShader<'a, V, U, P> where V: Send + Sync,
                                                                                      K: Send + Sync + Barycentric {
         let screen_vertices = self.mesh.vertices.par_iter().map(|vertex| {
             vertex_shader(vertex, &*self.uniforms)
-                .normalize(self.framebuffer.viewport())
+                .normalize(self.framebuffer.viewport(), self.near_far)
         }).collect();
 
         FragmentShader {
@@ -94,8 +96,12 @@ impl<'a, V, U: 'a, P: 'static> VertexShader<'a, V, U, P> where V: Send + Sync,
     }
 }
 
+/// Fragment returned by the fragment shader, which can either be a color
+/// value for the pixel or a discard flag to skip that fragment altogether.
 pub enum Fragment<P> where P: Sized + Pixel {
+    /// Discard the fragment altogether, as if it was never there.
     Discard,
+    /// Desired color for the pixel
     Color(P)
 }
 
@@ -135,7 +141,7 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
             let piter = pcolor.iter().zip(pdepth.iter());
 
             for ((pc, pd), (fc, fd)) in piter.zip(fiter) {
-                if *fd < *pd {
+                if *fd > *pd {
                     *fd = *pd;
                     *fc = (*self.blend_func)(*pc, *fc);
                 }
@@ -155,15 +161,15 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
 
                 let XYZW { x, y, z, .. } = *vertex.position;
 
-                // don't render pixels "behind" or outside of the camera view
-                if 0.0 <= x && x < bb.0 && 0.0 <= y && y < bb.1 && z < 0.0 {
+                // don't render points "behind" or outside of the camera view
+                if 0.0 <= x && x < bb.0 && 0.0 <= y && y < bb.1 && z > 0.0 {
                     let px = x as u32;
                     let py = y as u32;
 
                     if framebuffer.check_coordinate(px, py) {
                         let (fc, fd) = unsafe { framebuffer.pixel_depth_mut(px, py) };
 
-                        if z > *fd {
+                        if z < *fd {
                             match fragment_shader(vertex, &self.uniforms) {
                                 Fragment::Color(c) => {
                                     *fc = (*self.blend_func)(c, *fc);
@@ -207,11 +213,12 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
 
                             let position = a.position * (1.0 - t) + b.position * t;
 
-                            if position.z < 0.0 {
+                            /// Don't render pixels "behind" the camera
+                            if position.z > 0.0 {
                                 if framebuffer.check_coordinate(x, y) {
                                     let (fc, fd) = unsafe { framebuffer.pixel_depth_mut(x, y) };
 
-                                    if position.z > *fd {
+                                    if position.z < *fd {
                                         // run fragment shader
                                         let fragment = fragment_shader(&ScreenVertex {
                                             position: position,
@@ -317,11 +324,11 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
                         let position = a.position * u + b.position * v + c.position * r;
 
                         // don't render pixels "behind" the camera
-                        if position.z < 0.0 {
+                        if position.z > 0.0 {
                             let (fc, fd) = unsafe { framebuffer.pixel_depth_mut(px, py) };
 
                             // skip fragments that are behind over previous fragments
-                            if position.z > *fd {
+                            if position.z < *fd {
                                 // run fragment shader
                                 let fragment = fragment_shader(&ScreenVertex {
                                     position: position,
