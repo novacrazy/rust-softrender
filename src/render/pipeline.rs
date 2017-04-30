@@ -314,12 +314,12 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
                     // calculate barycentric coordinates of the current point
                     let u = ((y2 - y3) * (x - x3) + (x3 - x2) * (y - y3)) / det;
                     let v = ((y3 - y1) * (x - x3) + (x1 - x3) * (y - y3)) / det;
-                    let r = 1.0 - u - v;
+                    let w = 1.0 - u - v;
 
                     // check if the point is inside the triangle at all
-                    if u >= 0.0 && v >= 0.0 && r >= 0.0 {
+                    if u >= 0.0 && v >= 0.0 && w >= 0.0 {
                         // interpolate screen-space position
-                        let position = a.position * u + b.position * v + c.position * r;
+                        let position = a.position * u + b.position * v + c.position * w;
 
                         // don't render pixels "behind" the camera
                         if position.z > 0.0 {
@@ -333,7 +333,7 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
                                     // interpolate the uniforms
                                     uniforms: Barycentric::interpolate(u, &a.uniforms,
                                                                        v, &b.uniforms,
-                                                                       r, &c.uniforms),
+                                                                       w, &c.uniforms),
                                 }, &self.uniforms);
 
                                 match fragment {

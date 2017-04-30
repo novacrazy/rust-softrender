@@ -8,41 +8,47 @@ use std::ops::{Add, Mul};
 ///
 /// See [This document](https://classes.soe.ucsc.edu/cmps160/Fall10/resources/barycentricInterpolation.pdf) for more information
 pub trait Barycentric {
-    fn interpolate(u: f32, x1: &Self, v: f32, x2: &Self, r: f32, x3: &Self) -> Self;
+    fn interpolate(u: f32, x1: &Self, v: f32, x2: &Self, w: f32, x3: &Self) -> Self;
 }
 
 #[inline(always)]
-pub fn barycentric_interpolate<T>(u: f32, ux: T, v: f32, vx: T, r: f32, rx: T) -> T
+pub fn barycentric_interpolate<T>(u: f32, ux: T, v: f32, vx: T, w: f32, wx: T) -> T
     where T: Add<Output=T> + Add<f32, Output=T> + Mul<f32, Output=T> {
-    ux * u + vx * v + rx * r
+    ux * u + vx * v + wx * w
 }
 
 impl Barycentric for f32 {
     #[inline(always)]
-    fn interpolate(u: f32, ux: &Self, v: f32, vx: &Self, r: f32, rx: &Self) -> Self {
-        barycentric_interpolate(u, *ux, v, *vx, r, *rx)
+    fn interpolate(u: f32, ux: &Self, v: f32, vx: &Self, w: f32, wx: &Self) -> Self {
+        barycentric_interpolate(u, *ux, v, *vx, w, *wx)
     }
 }
 
 #[macro_export]
 macro_rules! declare_uniforms {
-    ($name:ident { $($field:ident: $t:ty,)* }) => {
+    ($(#[$($struct_attrs:tt)*])* pub struct $name:ident {
+        $($(#[$($field_attrs:tt)*])* pub $field:ident: $t:ty,)*
+    }) => {
+        $(#[$($struct_attrs)*])*
         pub struct $name {
-            $(pub $field: $t),*
+            $(
+                $(#[$($field_attrs)*])*
+                pub $field: $t
+            ),*
         }
 
         impl $crate::render::Barycentric for $name {
-            fn interpolate(u: f32, ux: &Self, v: f32, vx: &Self, r: f32, rx: &Self) -> Self {
+            fn interpolate(u: f32, ux: &Self, v: f32, vx: &Self, w: f32, wx: &Self) -> Self {
                 $name {
                     $(
                         $field: $crate::render::Barycentric::interpolate(u, &ux.$field,
                                                                          v, &vx.$field,
-                                                                         r, &rx.$field)
+                                                                         w, &wx.$field)
                     ),*
                 }
             }
         }
-    }
+    };
 }
 
 pub mod nalgebra_uniforms {
@@ -60,14 +66,14 @@ pub mod nalgebra_uniforms {
                 where S: OwnedStorage<f32, $R, $C>,
                       S::Alloc: OwnedAllocator<f32, $R, $C, S> {
                 #[inline]
-                fn interpolate(u: f32, ux: &Self, v: f32, vx: &Self, r: f32, rx: &Self) -> Self {
+                fn interpolate(u: f32, ux: &Self, v: f32, vx: &Self, w: f32, wx: &Self) -> Self {
                     unsafe {
                         let mut res = Self::new_uninitialized();
 
                         $(
                             *res.get_unchecked_mut($irow, $icol) = *ux.get_unchecked($irow, $icol) * u +
                                                                    *vx.get_unchecked($irow, $icol) * v +
-                                                                   *rx.get_unchecked($irow, $icol) * r;
+                                                                   *wx.get_unchecked($irow, $icol) * w;
                         )*
 
                         res
