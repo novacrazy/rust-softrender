@@ -130,20 +130,13 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
         self.blend_func = Box::new(f);
     }
 
+    // Merges framebuffers in parallel
     fn merge_framebuffers(&mut self, sources: Vec<FrameBuffer<P>>) {
-        for pf in sources.into_iter() {
-            let (pcolor, pdepth) = pf.buffers();
-            let (mut fcolor, mut fdepth) = self.framebuffer.buffers_mut();
-
-            let fiter = fcolor.iter_mut().zip(fdepth.iter_mut());
-            let piter = pcolor.iter().zip(pdepth.iter());
-
-            for ((pc, pd), (fc, fd)) in piter.zip(fiter) {
-                if *fd > *pd {
-                    *fd = *pd;
-                    *fc = (*self.blend_func)(*pc, *fc);
-                }
-            }
+        if let Some(final_framebuffer) = sources.into_par_iter().reduce_with(|mut a, b| {
+            b.merge_into(&mut a, &self.blend_func);
+            a
+        }) {
+            final_framebuffer.merge_into(&mut self.framebuffer, &self.blend_func);
         }
     }
 

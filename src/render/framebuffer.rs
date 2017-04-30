@@ -51,6 +51,31 @@ impl<P: Pixel> FrameBuffer<P> {
         }
     }
 
+    pub fn merge_into(&self, mut other: &mut FrameBuffer<P>, blend_func: &Box<Fn(P, P) -> P + Send + Sync>) {
+        let (pcolor, pdepth) = self.buffers();
+        let (mut fcolor, mut fdepth) = other.buffers_mut();
+
+        debug_assert_eq!(pcolor.len(), fcolor.len());
+        debug_assert_eq!(pdepth.len(), fdepth.len());
+        debug_assert_eq!(pcolor.len(), fdepth.len());
+
+        for i in 0..pcolor.len() {
+            unsafe {
+                let fd = fdepth.get_unchecked_mut(i);
+                let pd = pdepth.get_unchecked(i);
+
+                if *fd > *pd {
+                    *fd = *pd;
+
+                    let pc = pcolor.get_unchecked(i);
+
+                    let fc = fcolor.get_unchecked_mut(i);
+                    *fc = (*blend_func)(*pc, *fc);
+                }
+            }
+        }
+    }
+
     /// Sets all depth and color values to their default
     pub fn clear(&mut self) where P: Default {
         self.clear_with(P::default())
@@ -73,11 +98,13 @@ impl<P: Pixel> FrameBuffer<P> {
     pub fn depth_buffer_mut(&mut self) -> &mut Vec<f32> { &mut self.depth }
 
     /// Returns references to all buffers at once
+    #[inline]
     pub fn buffers(&self) -> (&Vec<P>, &Vec<f32>) {
         (&self.color, &self.depth)
     }
 
     /// Returns mutable references to all buffers at once
+    #[inline]
     pub fn buffers_mut(&mut self) -> (&mut Vec<P>, &mut Vec<f32>) {
         (&mut self.color, &mut self.depth)
     }
