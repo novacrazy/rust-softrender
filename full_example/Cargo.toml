@@ -1,0 +1,17 @@
+[package]
+authors = ["Aaron Trent <novacrazy@gmail.com>"]
+name = "softrender_full_example"
+version = "0.1.0"
+
+[dependencies]
+image = "0.13.0"
+nalgebra = "0.12.1"
+rayon = "0.7.0"
+wavefront_obj = "5.0.0"
+
+[dependencies.assimp]
+git = "https://github.com/combustion-engine/assimp-rs"
+
+[dependencies.softrender]
+features = ["image_compat"]
+path = "../"
