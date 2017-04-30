@@ -1,5 +1,8 @@
 //! Pixel definition and operations
 
+use nalgebra::Vector4;
+use nalgebra::coordinates::XYZW;
+
 /// Trait required to distinguish pixel type for use in the framebuffer and fragment shader
 pub trait Pixel: Clone + Copy + Send + Sync {
     fn empty() -> Self;
@@ -33,5 +36,17 @@ impl Pixel for RGBAf32Pixel {
 
     fn with_alpha(self, alpha: f32) -> RGBAf32Pixel {
         RGBAf32Pixel { r: self.r, g: self.g, b: self.b, a: self.a * alpha }
+    }
+}
+
+impl Pixel for Vector4<f32> {
+    fn empty() -> Vector4<f32> {
+        Vector4::new(0.0, 0.0, 0.0, 0.0)
+    }
+
+    fn with_alpha(self, alpha: f32) -> Vector4<f32> {
+        let XYZW {x, y, z, w} = *self;
+
+        Vector4::new(x, y, z, w * alpha)
     }
 }
