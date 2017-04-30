@@ -1,4 +1,4 @@
-use image::RgbaImage;
+use image::{RgbaImage, Rgba};
 
 use ::color::{Color, decode_gamma, SRGB_GAMMA};
 
@@ -30,6 +30,15 @@ impl EdgeBehavior {
     }
 }
 
+fn from_image_texel(texel: &Rgba<u8>) -> Color {
+    Color {
+        r: (texel.data[0] as f32) / 255.0,
+        g: (texel.data[1] as f32) / 255.0,
+        b: (texel.data[2] as f32) / 255.0,
+        a: (texel.data[3] as f32) / 255.0,
+    }
+}
+
 impl Texture {
     pub fn new(image: RgbaImage) -> Texture {
         Texture(image)
@@ -38,21 +47,39 @@ impl Texture {
     pub fn sample(&self, u: f32, v: f32, method: SamplingMethod, edge: EdgeBehavior) -> Color {
         let (u, v) = edge.edge(u, v);
 
-        let c = match method {
+        let texel = match method {
             SamplingMethod::Nearest => {
                 let x = (u * (self.0.width() - 1) as f32).round() as u32;
                 let y = (v * (self.0.height() - 1) as f32).round() as u32;
 
-                self.0.get_pixel(x, y)
+                from_image_texel(self.0.get_pixel(x, y))
             }
-            _ => unimplemented!()
+            SamplingMethod::Bilinear => {
+                let u = (u * (self.0.width() - 1) as f32) + 0.5;
+                let v = (v * (self.0.height() - 1) as f32) + 0.5;
+                let x = u.floor() as u32;
+                let y = v.floor() as u32;
+
+                let u_ratio = u - x as f32;
+                let v_ratio = v - y as f32;
+
+                let u_opposite = 1.0 - u_ratio;
+                let v_opposite = 1.0 - v_ratio;
+
+                let xy = from_image_texel(self.0.get_pixel(x, y));
+                let x1y = from_image_texel(self.0.get_pixel(x + 1, y));
+                let xy1 = from_image_texel(self.0.get_pixel(x, y + 1));
+                let x1y1 = from_image_texel(self.0.get_pixel(x + 1, y + 1));
+
+                Color {
+                    r: (xy.r * u_opposite + x1y.r * u_ratio) * v_opposite + (xy1.r * u_opposite + x1y1.r * u_ratio) * v_ratio,
+                    g: (xy.g * u_opposite + x1y.g * u_ratio) * v_opposite + (xy1.g * u_opposite + x1y1.g * u_ratio) * v_ratio,
+                    b: (xy.b * u_opposite + x1y.b * u_ratio) * v_opposite + (xy1.b * u_opposite + x1y1.b * u_ratio) * v_ratio,
+                    a: (xy.a * u_opposite + x1y.a * u_ratio) * v_opposite + (xy1.a * u_opposite + x1y1.a * u_ratio) * v_ratio,
+                }
+            }
         };
 
-        decode_gamma(Color {
-            r: (c.data[0] as f32) / 255.0,
-            g: (c.data[1] as f32) / 255.0,
-            b: (c.data[2] as f32) / 255.0,
-            a: (c.data[3] as f32) / 255.0,
-        }, SRGB_GAMMA)
+        decode_gamma(texel, SRGB_GAMMA)
     }
 }
