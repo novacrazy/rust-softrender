@@ -1,5 +1,5 @@
 extern crate nalgebra;
-extern crate wavefront_obj;
+extern crate tobj;
 extern crate image;
 extern crate rayon;
 #[macro_use]
