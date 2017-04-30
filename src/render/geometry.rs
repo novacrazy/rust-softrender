@@ -1,7 +1,6 @@
-use nalgebra::{Vector4, Matrix4};
+use nalgebra::Vector4;
 use nalgebra::core::coordinates::XYZW;
 
-use ::utils::clamp;
 use ::render::Barycentric;
 
 /// Defines face winding variations. These apply to screen-space vertices,
