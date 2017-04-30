@@ -49,14 +49,14 @@ fn generate_global_uniforms(aspect_ratio: f32) -> GlobalUniforms {
         view: view,
         projection: projection,
         lights: vec![
-            Light::new_white(Point3::new(light_scale * -1.0, light_scale * 1.0, light_scale * -1.0), 6.0),
-            Light::new(Point3::new(light_scale * 1.0, light_scale * 1.0, light_scale * 1.0), 6.0, Color {
+            Light::new_white(Point3::new(light_scale * -1.0, light_scale * 1.0, light_scale * -1.0), 9.0),
+            Light::new(Point3::new(light_scale * 1.0, light_scale * 1.0, light_scale * 1.0), 9.0, Color {
                 r: 0.6, g: 0.6, b: 1.0, a: 1.0,
             }),
-            Light::new(Point3::new(light_scale * 0.0, light_scale * 3.0, light_scale * -1.0), 6.0, Color {
+            Light::new(Point3::new(light_scale * 0.0, light_scale * 3.0, light_scale * -1.0), 9.0, Color {
                 r: 1.0, g: 0.3, b: 0.3, a: 1.0,
             }),
-            Light::new(Point3::new(light_scale * -2.0, light_scale * -1.0, light_scale * 1.0), 6.0, Color {
+            Light::new(Point3::new(light_scale * -2.0, light_scale * -1.0, light_scale * 1.0), 9.0, Color {
                 r: 0.7, g: 1.0, b: 0.7, a: 1.0,
             }),
         ]
