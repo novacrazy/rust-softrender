@@ -19,7 +19,7 @@ pub struct MeshData {
 }
 
 /// Loads a .obj mesh from the given path
-fn load_model<P: AsRef<Path>>(p: P) -> Vec<MeshData> {
+pub fn load_model<P: AsRef<Path>>(p: P) -> Vec<MeshData> {
     let (models, materials): (Vec<tobj::Model>, Vec<tobj::Material>) = tobj::load_obj(p.as_ref().clone()).unwrap();
 
     models.into_iter().map(|model| {

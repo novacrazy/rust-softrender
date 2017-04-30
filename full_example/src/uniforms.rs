@@ -1,12 +1,6 @@
-use nalgebra::{Vector2, Point3, Vector4, Matrix4};
+use nalgebra::{Vector2, Vector4, Matrix4};
 
-use ::color::Color;
-
-pub struct Light {
-    pub color: Color,
-    pub position: Point3<f32>,
-    pub intensity: f32,
-}
+use ::light::Light;
 
 /// Define global uniforms. These don't need to be interpolated, so they can just be any type.
 pub struct GlobalUniforms {
@@ -28,6 +22,6 @@ declare_uniforms! {
         /// Surface normal in world-space
         pub normal: Vector4<f32>,
         // uv-coordinates for textures
-        //pub uv: Vector2<f32>,
+        pub uv: Vector2<f32>,
     }
 }
