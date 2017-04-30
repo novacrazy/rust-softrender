@@ -1,6 +1,7 @@
-use nalgebra::Vector4;
+use nalgebra::{Vector4, Matrix4};
 use nalgebra::core::coordinates::XYZW;
 
+use ::utils::clamp;
 use ::render::Barycentric;
 
 /// Defines face winding variations. These apply to screen-space vertices,
@@ -95,14 +96,15 @@ impl<K> ClipVertex<K> where K: Send + Sync + Barycentric {
     pub fn normalize(self, viewport: (f32, f32)) -> ScreenVertex<K> {
         ScreenVertex {
             position: {
+                let (width, height) = viewport;
+
                 let XYZW { x, y, z, w } = *self.position;
 
                 Vector4::new(
-                    (x / w + 1.0) * (viewport.0 / 2.0),
-                    // Vertical is flipped
-                    (1.0 - y / w) * (viewport.1 / 2.0),
-                    -z,
-                    w
+                    (x / w + 1.0) * (width / 2.0),
+                    (1.0 - y / w) * (height / 2.0),
+                    z / w,
+                    1.0 / w
                 )
             },
             uniforms: self.uniforms,
