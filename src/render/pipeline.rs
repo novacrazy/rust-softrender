@@ -24,7 +24,6 @@ pub struct VertexShader<'a, V, U: 'a, P: 'static> where V: Send + Sync,
     mesh: Arc<Mesh<V>>,
     uniforms: &'a U,
     framebuffer: &'a mut FrameBuffer<P>,
-    near_far: (f32, f32)
 }
 
 pub struct FragmentShader<'a, V, U: 'a, K, P: 'static> where V: Send + Sync,
@@ -55,12 +54,11 @@ impl<U, P> Pipeline<U, P> where U: Send + Sync,
     }
 
     /// Start the shading pipeline for a given mesh
-    pub fn render_mesh<V>(&mut self, near_far: (f32, f32), mesh: Arc<Mesh<V>>) -> VertexShader<V, U, P> where V: Send + Sync {
+    pub fn render_mesh<V>(&mut self, mesh: Arc<Mesh<V>>) -> VertexShader<V, U, P> where V: Send + Sync {
         VertexShader {
             mesh: mesh,
             uniforms: &self.uniforms,
             framebuffer: &mut self.framebuffer,
-            near_far: near_far,
         }
     }
 
@@ -82,7 +80,7 @@ impl<'a, V, U: 'a, P: 'static> VertexShader<'a, V, U, P> where V: Send + Sync,
                                                                                      K: Send + Sync + Barycentric {
         let screen_vertices = self.mesh.vertices.par_iter().map(|vertex| {
             vertex_shader(vertex, &*self.uniforms)
-                .normalize(self.framebuffer.viewport(), self.near_far)
+                .normalize(self.framebuffer.viewport())
         }).collect();
 
         FragmentShader {
