@@ -55,7 +55,7 @@ pub struct VertexShader<'a, V, U: 'a, P: 'static> where V: Send + Sync,
 /// if the geometry is nearer than an existing fragment, the existing fragment is overwritten.
 ///
 /// Uniforms passed from the vertex shader are interpolating inside the triangles using Barycentric interpolation,
-/// which is why it must satisfy the `Barycentric` trait, which can be automatically implemented for many types using the
+/// which is why it must satisfy the [`Barycentric`](../uniform/trait.Barycentric.html) trait, which can be automatically implemented for many types using the
 /// `declare_uniforms!` macro. See the documentation on that for more information on how to use it.
 pub struct FragmentShader<'a, V, U: 'a, K, P: 'static> where V: Send + Sync,
                                                              U: Send + Sync,

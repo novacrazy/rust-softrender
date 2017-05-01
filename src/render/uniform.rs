@@ -1,4 +1,9 @@
 //! Types, traits and macros for uniform variables
+//!
+//! Currently, the `Barycentric` trait is implemented for `f32` and nalgebra
+//! matrices (including vectors), points, translations, rotations, and Quaternions.
+//!
+//! It can be implemented automatically for your uniforms structures by using the [`declare_uniforms!`](../../macro.declare_uniforms.html) macro.
 
 use std::ops::{Add, Mul};
 
@@ -6,7 +11,10 @@ use std::ops::{Add, Mul};
 ///
 /// This is required for any rasterization to occur.
 ///
-/// See [This document](https://classes.soe.ucsc.edu/cmps160/Fall10/resources/barycentricInterpolation.pdf) for more information
+/// See [This document](https://classes.soe.ucsc.edu/cmps160/Fall10/resources/barycentricInterpolation.pdf) for more information.
+///
+/// This trait can be implemented automatically for most uniforms by using the [`declare_uniforms!`](../../macro.declare_uniforms.html) macro,
+/// which for any collection of uniforms for which `Barycentric` is implemented, will delegate `Barycentric::interpolate` to each member.
 pub trait Barycentric {
     /// Interpolate the three values with their corresponding barycentric coordinate weight
     fn interpolate(u: f32, x1: &Self, v: f32, x2: &Self, w: f32, x3: &Self) -> Self;
@@ -26,6 +34,46 @@ impl Barycentric for f32 {
     }
 }
 
+/// Declares a structure and implements the [`Barycentric`](render/uniform/trait.Barycentric.html) trait for it by delegating the trait to each member.
+///
+/// So, for example, this:
+///
+/// ```ignore
+/// declare_uniforms!(
+///     pub struct MyUniforms {
+///         /// Position in world-space
+///         pub position: Vector4<f32>,
+///         pub normal: Vector4<f32>,
+///         pub uv: Vector2<f32>,
+///     }
+/// );
+/// ```
+///
+/// becomes:
+///
+/// ```ignore
+/// pub struct MyUniforms {
+///     /// Position in world-space
+///     pub position: Vector4<f32>,
+///     pub normal: Vector4<f32>,
+///     pub uv: Vector2<f32>,
+/// }
+///
+/// impl Barycentric for MyUniforms {
+///     fn interpolate(u: f32, ux: &Self, v: f32, vx: &Self, w: f32, wx: &Self) -> Self {
+///         MyUniforms {
+///             position: Barycentric::interpolate(u, &ux.position, v, &vx.position, w, &wx.position),
+///             normal: Barycentric::interpolate(u, &ux.normal, v, &vx.normal, w, &wx.normal),
+///             uv: Barycentric::interpolate(u, &ux.uv, v, &vx.uv, w, &wx.uv),
+///         }
+///     }
+/// }
+/// ```
+///
+/// note that the `u` and `v` in the `Barycentric::interpolate` arguments are mostly unrelated to the `uv` normal. They're both Barycentric coordinates,
+/// but for different things.
+///
+/// For now, the struct itself must be `pub` and all the members must be `pub`, but hopefully that can change in the future.
 #[macro_export]
 macro_rules! declare_uniforms {
     ($(#[$($struct_attrs:tt)*])* pub struct $name:ident {
