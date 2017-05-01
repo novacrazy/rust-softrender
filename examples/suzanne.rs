@@ -60,19 +60,20 @@ struct GlobalUniforms {
     projection: Matrix4<f32>,
 }
 
+// Define shader uniforms that can be interpolated on the triangle.
+// The declare_uniforms! macro helps implement the Barycentric trait on the resulting structure
+declare_uniforms! {
+    pub struct Uniforms {
+        pub position: Vector4<f32>,
+        pub normal: Vector4<f32>,
+    }
+}
+
+
 #[allow(non_snake_case)]
 fn main() {
     // Create the image framebuffer with a near-black background
     let framebuffer = FrameBuffer::<RGBAf32Pixel>::new_with(2000, 2000, RGBAf32Pixel { r: 0.01, g: 0.01, b: 0.01, a: 1.0 });
-
-    // Define shader uniforms that can be interpolated on the triangle.
-    // The declare_uniforms! macro helps implement the Barycentric trait on the resulting structure
-    declare_uniforms! {
-        pub struct Uniforms {
-            pub position: Vector4<f32>,
-            pub normal: Vector4<f32>,
-        }
-    }
 
     // Create the model transform
     let model = nalgebra::Isometry3::new(Vector3::new(0.0, 0.0, 0.0),
