@@ -8,6 +8,7 @@ repository = "https://github.com/novacrazy/rust-softrender"
 readme = "README.md"
 keywords = ["render", "renderer", "rasterizer", "3d"]
 documentation = "https://docs.rs/softrender/"
+include = ["src/**/*", "Cargo.toml"]
 
 [dependencies]
 nalgebra = "0.12"
