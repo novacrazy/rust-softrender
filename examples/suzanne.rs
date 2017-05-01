@@ -1,5 +1,3 @@
-/// Run with `cargo run --example suzanne --release --features "image_compat"`
-
 extern crate nalgebra;
 extern crate tobj;
 extern crate image;

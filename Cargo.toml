@@ -25,3 +25,7 @@ tobj = "0.1.3"
 [features]
 default = []
 image_compat = ["image"]
+
+[[example]]
+name = "suzanne"
+required-features = ["image_compat"]
