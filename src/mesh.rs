@@ -36,8 +36,11 @@ pub struct Mesh<V> {
     /// then you'd have your index list be something like:
     ///
     /// ```text
-    /// [0, 1, 2, 
+    /// [0, 1, 2, // bottom half triangle
+    ///  1, 3, 2] // top half triangle
     /// ```
+    ///
+    /// Note that both of those triangles go in a clockwise direction from vertex to vertex.
     pub indices: Vec<u32>,
     /// Vertices with their vertex data
     pub vertices: Vec<Vertex<V>>,
