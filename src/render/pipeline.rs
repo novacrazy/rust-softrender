@@ -379,7 +379,7 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
                                             match fragment {
                                                 Fragment::Color(c) => {
                                                     // blend pixels together and set the new depth value
-                                                    *fc = (*blend_func)(c.with_alpha(alpha as f32), *fc);
+                                                    *fc = (*blend_func)(c.mul_alpha(alpha as f32), *fc);
                                                     *fd = 0.0;
                                                 }
                                                 Fragment::Discard => ()
@@ -482,7 +482,7 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
                                             match fragment {
                                                 Fragment::Color(c) => {
                                                     // blend pixels together and set the new depth value
-                                                    *fc = (*blend_func)(c.with_alpha(alpha as f32), *fc);
+                                                    *fc = (*blend_func)(c.mul_alpha(alpha as f32), *fc);
                                                     *fd = 0.0;
                                                 }
                                                 Fragment::Discard => ()
