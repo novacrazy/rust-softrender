@@ -33,9 +33,9 @@ pub struct FragmentShader<'a, V, U: 'a, K, P: 'static> where V: Send + Sync,
     mesh: Arc<Mesh<V>>,
     uniforms: &'a U,
     framebuffer: &'a mut FrameBuffer<P>,
-    screen_vertices: Vec<ScreenVertex<K>>,
+    screen_vertices: Arc<Vec<ScreenVertex<K>>>,
     cull_faces: Option<FaceWinding>,
-    blend_func: Box<Fn(P, P) -> P + Send + Sync>,
+    blend_func: Arc<Box<Fn(P, P) -> P + Send + Sync>>,
 }
 
 ///////////////////////
@@ -76,6 +76,17 @@ impl<U, P> Pipeline<U, P> where U: Send + Sync,
 impl<'a, V, U: 'a, P: 'static> VertexShader<'a, V, U, P> where V: Send + Sync,
                                                                U: Send + Sync,
                                                                P: Pixel {
+    /// Duplicates all references to internal state to return a cloned vertex shader,
+    /// though since the vertex shader itself has very little internal state at this point,
+    /// it's not that useful.
+    pub fn duplicate<'b>(&'b mut self) -> VertexShader<'b, V, U, P> where 'a: 'b {
+        VertexShader {
+            mesh: self.mesh.clone(),
+            uniforms: self.uniforms,
+            framebuffer: self.framebuffer
+        }
+    }
+
     pub fn run<S, K>(self, vertex_shader: S) -> FragmentShader<'a, V, U, K, P> where S: Fn(&Vertex<V>, &U) -> ClipVertex<K> + Sync,
                                                                                      K: Send + Sync + Barycentric {
         let VertexShader {
@@ -99,10 +110,10 @@ impl<'a, V, U: 'a, P: 'static> VertexShader<'a, V, U, P> where V: Send + Sync,
             mesh: mesh,
             uniforms: uniforms,
             framebuffer: framebuffer,
-            screen_vertices: screen_vertices,
+            screen_vertices: Arc::new(screen_vertices),
             cull_faces: None,
             // Use empty "normal" blend by default
-            blend_func: Box::new(|s, _| s),
+            blend_func: Arc::new(Box::new(|s, _| s)),
         }
     }
 }
@@ -134,6 +145,20 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
                                                                        U: Send + Sync,
                                                                        K: Send + Sync + Barycentric,
                                                                        P: Pixel {
+    /// Duplicates all references to internal state to return a cloned fragment shader,
+    /// which can be used to efficiently render the same geometry with different
+    /// rasterization methods in quick succession.
+    pub fn duplicate<'b>(&'b mut self) -> FragmentShader<'b, V, U, K, P> where 'a: 'b {
+        FragmentShader {
+            mesh: self.mesh.clone(),
+            uniforms: self.uniforms,
+            framebuffer: self.framebuffer,
+            screen_vertices: self.screen_vertices.clone(),
+            cull_faces: self.cull_faces.clone(),
+            blend_func: self.blend_func.clone()
+        }
+    }
+
     /// Cull faces based on winding order. For more information on how and why this works,
     /// check out the documentation for the [`FaceWinding`](../geometry/enum.FaceWinding.html) enum.
     #[inline(always)]
@@ -154,7 +179,7 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
     /// for the *over* color function.
     #[inline(always)]
     pub fn set_blend_function<F>(&mut self, f: F) where F: Fn(P, P) -> P + Send + Sync + 'static {
-        self.blend_func = Box::new(f);
+        self.blend_func = Arc::new(Box::new(f));
     }
 
     /// Render the vertices as a point cloud. Shading is done per-vertex for a single pixel.
@@ -168,6 +193,8 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
             blend_func,
             ..
         } = self;
+
+        let blend_func = &*blend_func;
 
         // template framebuffer for the render framebuffers, allowing the real framebuffer to be borrowed mutably later on.
         let empty_framebuffer = framebuffer.empty_clone();
@@ -234,6 +261,8 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
             blend_func,
             ..
         } = self;
+
+        let blend_func = &*blend_func;
 
         // Bounding box for the entire view space
         let bb = (framebuffer.width() - 1,
@@ -335,6 +364,8 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
             ..
         } = self;
 
+        let blend_func = &*blend_func;
+
         // Bounding box for the entire view space
         let bb = (framebuffer.width() - 1,
                   framebuffer.height() - 1);
@@ -435,6 +466,8 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
             cull_faces,
             blend_func
         } = self;
+
+        let blend_func = &*blend_func;
 
         // Bounding box for the entire view space
         let bb = (framebuffer.width() - 1,
