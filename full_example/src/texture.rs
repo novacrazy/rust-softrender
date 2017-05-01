@@ -5,10 +5,10 @@ use ::color::{Color, decode_gamma, SRGB_GAMMA};
 pub struct Texture(RgbaImage);
 
 pub struct Material {
-    ambient_texture: Option<Texture>,
-    diffuse_texture: Option<Texture>,
-    specular_texture: Option<Texture>,
-    normal_texture: Option<Texture>,
+   pub ambient_texture: Option<Texture>,
+   pub diffuse_texture: Option<Texture>,
+   pub specular_texture: Option<Texture>,
+   pub normal_texture: Option<Texture>,
 }
 
 pub enum SamplingMethod {
