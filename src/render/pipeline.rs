@@ -219,6 +219,109 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
         });
     }
 
+    /// Vertices 0 and 1 are considered a line. Vertices 2 and 3 are considered a line. And so on.
+    ///
+    /// If the user specifies a non-even number of vertices, then the extra vertex is ignored.
+    ///
+    /// Equivalent to `GL_LINES` primitive
+    pub fn lines<S>(self, fragment_shader: S, style: LineStyle) where S: Fn(&ScreenVertex<K>, &U) -> Fragment<P> + Send + Sync {
+        // Pull all variables out of self so we can borrow them individually.
+        let FragmentShader {
+            mesh,
+            uniforms,
+            framebuffer,
+            screen_vertices,
+            blend_func,
+            ..
+        } = self;
+
+        // Bounding box for the entire view space
+        let bb = (framebuffer.width() - 1,
+                  framebuffer.height() - 1);
+
+        // template framebuffer for the render framebuffers, allowing the real framebuffer to be borrowed mutably later on.
+        let empty_framebuffer = framebuffer.empty_clone();
+
+        // Only allow as many new empty framebuffer clones as their are running threads, so one framebuffer per thread.
+        // This has the benefit of running a large of number of triangles sequentially.
+        let lines_per_thread = mesh.indices.len() / (2 * current_num_threads());
+
+        let partial_framebuffers = mesh.indices.par_chunks(2).with_min_len(lines_per_thread).filter(|line| line.len() == 2).fold(
+            || { empty_framebuffer.empty_clone() }, |mut framebuffer: FrameBuffer<P>, line| {
+                let ref a = screen_vertices[line[0] as usize];
+                let ref b = screen_vertices[line[1] as usize];
+
+                let (x1, y1) = (a.position.x, a.position.y);
+                let (x2, y2) = (b.position.x, b.position.y);
+
+                let d = (x1 - x2).hypot(y1 - y2);
+
+                {
+                    let plot_fragment = |x, y, alpha| {
+                        if x >= 0 && y >= 0 {
+                            let x = x as u32;
+                            let y = y as u32;
+
+                            if x <= bb.0 && y <= bb.1 {
+                                let d1 = (x1 - x as f32).hypot(y1 - y as f32);
+
+                                let t = d1 / d;
+
+                                let position = a.position * (1.0 - t) + b.position * t;
+
+                                // Don't render pixels "behind" the camera
+                                if position.z > 0.0 {
+                                    if framebuffer.check_coordinate(x, y) {
+                                        let (fc, fd) = unsafe { framebuffer.pixel_depth_mut(x, y) };
+
+                                        if position.z < *fd {
+                                            // run fragment shader
+                                            let fragment = fragment_shader(&ScreenVertex {
+                                                position: position,
+                                                uniforms: Barycentric::interpolate((1.0 - t), &a.uniforms,
+                                                                                   t, &b.uniforms,
+                                                                                   0.0, &b.uniforms),
+                                            }, &uniforms);
+
+                                            match fragment {
+                                                Fragment::Color(c) => {
+                                                    // blend pixels together and set the new depth value
+                                                    *fc = (*blend_func)(c.with_alpha(alpha as f32), *fc);
+                                                    *fd = 0.0;
+                                                }
+                                                Fragment::Discard => ()
+                                            };
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    };
+
+                    match style {
+                        LineStyle::Thin => {
+                            ::render::line::draw_line_bresenham(x1 as i64, y1 as i64, x2 as i64, y2 as i64, plot_fragment);
+                        }
+                        LineStyle::ThinAA => {
+                            ::render::line::draw_line_xiaolin_wu(x1 as f64, y1 as f64, x2 as f64, y2 as f64, plot_fragment);
+                        }
+                    }
+                }
+
+                framebuffer
+            }
+        );
+
+        // Merge incoming partial framebuffers in parallel
+        partial_framebuffers.reduce_with(|mut a, b| {
+            b.merge_into(&mut a, &blend_func);
+            a
+        }).map(|final_framebuffer| {
+            // Merge final framebuffer into external framebuffer
+            final_framebuffer.merge_into(framebuffer, &blend_func);
+        });
+    }
+
     /// Render a wireframe for every triangle in the mesh. Shading it done along the lines using linear
     /// interpolation for uniforms in the connected vertices.
     pub fn wireframe<S>(self, fragment_shader: S, style: LineStyle) where S: Fn(&ScreenVertex<K>, &U) -> Fragment<P> + Send + Sync {
@@ -249,7 +352,7 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
                 let ref b = screen_vertices[triangle[1] as usize];
                 let ref c = screen_vertices[triangle[2] as usize];
 
-                for &(a, b, c) in &[(a, b, c), (b, c, a), (c, a, b)] {
+                for &(a, b) in &[(a, b), (b, c), (c, a)] {
                     let (x1, y1) = (a.position.x, a.position.y);
                     let (x2, y2) = (b.position.x, b.position.y);
 
@@ -276,7 +379,9 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
                                             // run fragment shader
                                             let fragment = fragment_shader(&ScreenVertex {
                                                 position: position,
-                                                uniforms: Barycentric::interpolate((1.0 - t), &a.uniforms, t, &b.uniforms, 0.0, &c.uniforms),
+                                                uniforms: Barycentric::interpolate((1.0 - t), &a.uniforms,
+                                                                                   t, &b.uniforms,
+                                                                                   0.0, &b.uniforms),
                                             }, &uniforms);
 
                                             match fragment {
@@ -317,6 +422,9 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
         });
     }
 
+    /// Rasterize the given vertices as triangles.
+    ///
+    /// Equivalent to `GL_TRIANGLES`
     pub fn triangles<S>(self, fragment_shader: S) where S: Fn(&ScreenVertex<K>, &U) -> Fragment<P> + Send + Sync {
         // Pull all variables out of self so we can borrow them individually.
         let FragmentShader {
