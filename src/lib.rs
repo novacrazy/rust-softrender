@@ -28,7 +28,7 @@
 //! * Stencil buffer
 //! * Generic texture support
 //! * Multi-target framebuffers
-//! * Such as multiple color components, which useful for deferred rendering.
+//! * Such as multiple color components, which is useful for deferred rendering.
 //! * Framebuffer to texture conversion, to compliment the above points.
 //!
 //! ### Glaring Problems
