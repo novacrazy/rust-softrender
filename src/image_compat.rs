@@ -1,9 +1,16 @@
+//! Useful compatibility with the `image` crate
+
 use image;
 
 use ::pixel::RGBAf32Pixel;
 use ::render::FrameBuffer;
 
+/// Additional functionality for copying a framebuffer into an image
 pub trait ImageFrameBuffer<P, C> where P: image::Pixel {
+    /// Copies the floating point color component of the framebuffer into a `Rgba<u8>` image.
+    ///
+    /// This clamps all color channels between 0.0 and 1.0,
+    /// so tonemapping of HDR colors should be done before this to avoid any undesired behavior.
     fn copy_to_image(&self) -> Option<image::ImageBuffer<P, C>>;
 }
 

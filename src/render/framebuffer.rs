@@ -51,6 +51,7 @@ impl<P: Pixel> FrameBuffer<P> {
         }
     }
 
+    /// Merges `self` into another framebuffer, taking into account the depth buffer and pixel blending.
     pub fn merge_into(&self, mut other: &mut FrameBuffer<P>, blend_func: &Box<Fn(P, P) -> P + Send + Sync>) {
         let (pcolor, pdepth) = self.buffers();
         let (mut fcolor, mut fdepth) = other.buffers_mut();

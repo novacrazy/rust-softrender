@@ -1,3 +1,5 @@
+//! Shader geometry structures
+
 use nalgebra::Vector4;
 use nalgebra::core::coordinates::XYZW;
 
@@ -72,6 +74,7 @@ pub struct ScreenVertex<K> where K: Send + Sync + Barycentric {
 }
 
 impl<K> ClipVertex<K> where K: Send + Sync + Barycentric {
+    /// Creates a new `ClipVertex` from the given clip-space position and uniforms
     #[inline(always)]
     pub fn new(position: Vector4<f32>, uniforms: K) -> ClipVertex<K> {
         ClipVertex { position: position, uniforms: uniforms }
@@ -108,12 +111,5 @@ impl<K> ClipVertex<K> where K: Send + Sync + Barycentric {
             },
             uniforms: self.uniforms,
         }
-    }
-}
-
-impl<K> ScreenVertex<K> where K: Send + Sync + Barycentric {
-    #[inline(always)]
-    pub fn new(position: Vector4<f32>, uniforms: K) -> ScreenVertex<K> {
-        ScreenVertex { position: position, uniforms: uniforms }
     }
 }

@@ -5,8 +5,12 @@ use nalgebra::coordinates::XYZW;
 
 /// Trait required to distinguish pixel type for use in the framebuffer and fragment shader
 pub trait Pixel: Clone + Copy + Send + Sync {
+    /// An empty pixel in which values can be accumulated into
     fn empty() -> Self;
+    /// Copy the pixel, but with the given alpha channel value
     fn with_alpha(self, alpha: f32) -> Self;
+    /// Copy the pixel, but multiply the alpha channel with the given value
+    fn mul_alpha(self, alpha: f32) -> Self;
 }
 
 /// The most dead simple f32 pixel representation
@@ -35,6 +39,10 @@ impl Pixel for RGBAf32Pixel {
     }
 
     fn with_alpha(self, alpha: f32) -> RGBAf32Pixel {
+        RGBAf32Pixel { r: self.r, g: self.g, b: self.b, a: alpha }
+    }
+
+    fn mul_alpha(self, alpha: f32) -> RGBAf32Pixel {
         RGBAf32Pixel { r: self.r, g: self.g, b: self.b, a: self.a * alpha }
     }
 }
@@ -45,7 +53,13 @@ impl Pixel for Vector4<f32> {
     }
 
     fn with_alpha(self, alpha: f32) -> Vector4<f32> {
-        let XYZW {x, y, z, w} = *self;
+        let XYZW { x, y, z, .. } = *self;
+
+        Vector4::new(x, y, z, alpha)
+    }
+
+    fn mul_alpha(self, alpha: f32) -> Vector4<f32> {
+        let XYZW { x, y, z, w } = *self;
 
         Vector4::new(x, y, z, w * alpha)
     }

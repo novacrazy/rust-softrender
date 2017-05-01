@@ -1,5 +1,7 @@
 //! Relatively simple software rendering of 3D meshes.
 
+#![deny(missing_docs)]
+
 extern crate nalgebra;
 extern crate rayon;
 

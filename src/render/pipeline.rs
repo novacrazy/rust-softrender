@@ -1,3 +1,5 @@
+//! Rendering pipeline implementation
+
 use std::sync::Arc;
 
 use rayon::prelude::*;
@@ -13,11 +15,26 @@ use ::render::geometry::{FaceWinding, ClipVertex, ScreenVertex};
 use ::render::framebuffer::FrameBuffer;
 use ::render::uniform::Barycentric;
 
+/// Starting point for the rendering pipeline.
+///
+/// By itself, it only holds the framebuffer and global uniforms,
+/// but it spawns the first shader stage using those.
 pub struct Pipeline<U, P> where P: Pixel, U: Send + Sync {
     framebuffer: FrameBuffer<P>,
     uniforms: U,
 }
 
+/// Vertex shader stage.
+///
+/// The vertex shader is responsible for transforming all mesh vertices into a form which can be presented on screen (more or less),
+/// which usually involved transforming object-space coordinates to world-space, then to camera-space, then finally to projection/clip-space,
+/// at which point it and any uniforms are passed back and sent to the fragment shader.
+///
+/// For a full example of how this works, see the documentation on the `run` method below.
+///
+/// The vertex shader holds a reference to the pipeline framebuffer and global uniforms,
+/// and for the given mesh given to it when created.
+/// These cannot be modified while the vertex shader exists.
 pub struct VertexShader<'a, V, U: 'a, P: 'static> where V: Send + Sync,
                                                         U: Send + Sync,
                                                         P: Pixel {
@@ -26,6 +43,20 @@ pub struct VertexShader<'a, V, U: 'a, P: 'static> where V: Send + Sync,
     framebuffer: &'a mut FrameBuffer<P>,
 }
 
+/// Fragment shader stage.
+///
+/// The fragment shader is responsible for determining the color of pixels where the underlying geometry has been projected onto.
+/// Usually this is individual triangles that are rasterized and shaded by the fragment shader, but it also supports point-cloud, wireframe,
+/// and lines (pairs of vertices considered as endpoints for lines).
+///
+/// The fragment shader runs several tests before executing the given shader program, including a depth test.
+/// If the depth of the geometry (from the camera), is farther away than geometry that has already been rendered,
+/// the shader program isn't run at all, since it wouldn't be visible anyway. Additionally,
+/// if the geometry is nearer than an existing fragment, the existing fragment is overwritten.
+///
+/// Uniforms passed from the vertex shader are interpolating inside the triangles using Barycentric interpolation,
+/// which is why it must satisfy the `Barycentric` trait, which can be automatically implemented for many types using the
+/// `declare_uniforms!` macro. See the documentation on that for more information on how to use it.
 pub struct FragmentShader<'a, V, U: 'a, K, P: 'static> where V: Send + Sync,
                                                              U: Send + Sync,
                                                              K: Send + Sync + Barycentric,
@@ -87,6 +118,39 @@ impl<'a, V, U: 'a, P: 'static> VertexShader<'a, V, U, P> where V: Send + Sync,
         }
     }
 
+    /// Executes the vertex shader on every vertex in the mesh,
+    /// (hopefully) returning a `ClipVertex` with the transformed vertex in clip-space
+    /// and any uniforms to be passed into the fragment shader.
+    ///
+    /// In case you don't want to research what clip-space is, it's basically the output of the projection transformation,
+    /// so in your vertex shader you'd have something like:
+    ///
+    /// ```ignore
+    /// let fragment_shader = vertex_shader.run(|vertex, global_uniforms| {
+    ///     let GlobalUniforms { ref view, ref projection, ref model, ref model_inverse_transpose, .. } = *global_uniforms;
+    ///     let VertexData { normal, uv } = vertex.vertex_data;
+    ///
+    ///     // Transform vertex position to world-space
+    ///     let world_position = model * vertex.position.to_homogeneous();
+    ///
+    ///     // Transform normal to world-space
+    ///     let normal = (model_inverse_transpose * normal.to_homogeneous()).normalize();
+    ///
+    ///     // Transform vertex position to clip-space (projection-space)
+    ///     let clip_position = projection * view * world_position;
+    ///
+    ///     // Return the clip-space position and any uniforms to interpolate and pass into the fragment shader
+    ///     ClipVertex::new(clip_position, Uniforms {
+    ///         position: world_position,
+    ///         normal: normal,
+    ///         uv: uv,
+    ///     })
+    /// });
+    /// ```
+    ///
+    /// where `GlobalUniforms`, `VertexData` and `Uniforms` are data structures defined by you.
+    ///
+    /// See the [`full_example`](https://github.com/novacrazy/rust-softrender/tree/master/full_example) project for this in action.
     pub fn run<S, K>(self, vertex_shader: S) -> FragmentShader<'a, V, U, K, P> where S: Fn(&Vertex<V>, &U) -> ClipVertex<K> + Sync,
                                                                                      K: Send + Sync + Barycentric {
         let VertexShader {
