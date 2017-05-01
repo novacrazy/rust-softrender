@@ -55,9 +55,58 @@ pub mod nalgebra_uniforms {
     use super::Barycentric;
 
     use nalgebra::Matrix;
-    use nalgebra::dimension::{U1, U2, U3, U4, U5, U6};
+    use nalgebra::{PointBase, QuaternionBase, RotationBase, TranslationBase};
+    use nalgebra::dimension::{DimName, U1, U2, U3, U4, U5, U6};
     use nalgebra::allocator::OwnedAllocator;
-    use nalgebra::storage::OwnedStorage;
+    use nalgebra::storage::{Storage, OwnedStorage};
+
+    impl<D, S> Barycentric for PointBase<f32, D, S> where D: DimName,
+                                                          S: Storage<f32, D, U1>,
+                                                          Matrix<f32, D, U1, S>: Barycentric {
+        #[inline]
+        fn interpolate(u: f32, ux: &Self, v: f32, vx: &Self, w: f32, wx: &Self) -> Self {
+            PointBase {
+                coords: Barycentric::interpolate(u, &ux.coords,
+                                                 v, &vx.coords,
+                                                 w, &wx.coords)
+            }
+        }
+    }
+
+    impl<S> Barycentric for QuaternionBase<f32, S> where S: Storage<f32, U4, U1>,
+                                                         Matrix<f32, U4, U1, S>: Barycentric {
+        #[inline]
+        fn interpolate(u: f32, ux: &Self, v: f32, vx: &Self, w: f32, wx: &Self) -> Self {
+            QuaternionBase {
+                coords: Barycentric::interpolate(u, &ux.coords,
+                                                 v, &vx.coords,
+                                                 w, &wx.coords)
+            }
+        }
+    }
+
+    impl<D: DimName, S> Barycentric for TranslationBase<f32, D, S> where Matrix<f32, D, U1, S>: Barycentric {
+        #[inline]
+        fn interpolate(u: f32, ux: &Self, v: f32, vx: &Self, w: f32, wx: &Self) -> Self {
+            TranslationBase {
+                vector: Barycentric::interpolate(u, &ux.vector,
+                                                 v, &vx.vector,
+                                                 w, &wx.vector)
+            }
+        }
+    }
+
+    impl<D: DimName, S> Barycentric for RotationBase<f32, D, S> where S: Storage<f32, D, D>,
+                                                                      Matrix<f32, D, D, S>: Barycentric {
+        #[inline]
+        fn interpolate(u: f32, ux: &Self, v: f32, vx: &Self, w: f32, wx: &Self) -> Self {
+            RotationBase::from_matrix_unchecked(Barycentric::interpolate(
+                u, ux.matrix(),
+                v, vx.matrix(),
+                w, wx.matrix(),
+            ))
+        }
+    }
 
     // Format of this was taken from nalgebra/core/construction.rs
     macro_rules! nalgebra_matrix_uniforms {
