@@ -22,7 +22,7 @@ pub enum EdgeBehavior {
 }
 
 impl EdgeBehavior {
-    pub fn edge(self, u: f32, v: f32) -> (f32, f32) {
+    fn edge(self, u: f32, v: f32) -> (f32, f32) {
         match self {
             EdgeBehavior::Clamp => (u.min(1.0).max(0.0), v.min(1.0).max(0.0)),
             EdgeBehavior::Wrap => (u.fract(), v.fract())
