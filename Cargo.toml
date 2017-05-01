@@ -1,7 +1,13 @@
 [package]
 authors = ["Aaron Trent <novacrazy@gmail.com>"]
 name = "softrender"
+description = "Software Renderer in Rust"
 version = "0.1.0"
+license = "MIT"
+repository = "https://github.com/novacrazy/rust-softrender"
+readme = "README.md"
+keywords = ["render", "renderer", "rasterizer", "3d"]
+documentation = "https://docs.rs/softrender/"
 
 [dependencies]
 nalgebra = "0.12"
