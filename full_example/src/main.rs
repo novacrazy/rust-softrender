@@ -23,21 +23,21 @@ use self::uniforms::GlobalUniforms;
 
 fn generate_global_uniforms(aspect_ratio: f32) -> GlobalUniforms {
     // Create the model transform
-    let model = nalgebra::Isometry3::new(Vector3::new(0.0, 0.0, 0.0),
-                                         Vector3::new(0.0, 0.0, 0.0));
+    let model = Isometry3::new(Vector3::new(0.0, 0.0, 0.0),
+                               Vector3::new(0.0, 0.0, 0.0));
 
     // Define camera position
     let camera_position = Point3::new(1.0, 2.2, 2.0);
 
     // Create view matrix from camera position and look-at target
-    let view = nalgebra::Isometry3::look_at_rh(
+    let view = Isometry3::look_at_rh(
         &camera_position,
         &Point3::new(0.0, 0.25, 0.0),
         &Vector3::new(0.0, 1.0, 0.0)
     ).to_homogeneous();
 
     // Create a perspective projection matrix
-    let projection = nalgebra::Perspective3::new(aspect_ratio, 65.0f32.to_radians(), 0.1, 1000.0).to_homogeneous();
+    let projection = Perspective3::new(aspect_ratio, 65.0f32.to_radians(), 0.1, 1000.0).to_homogeneous();
 
     // Convenience variable to tweak distance of lights from object
     let light_scale = 1.0;
@@ -48,17 +48,12 @@ fn generate_global_uniforms(aspect_ratio: f32) -> GlobalUniforms {
         model_inverse_transpose: model.inverse().to_homogeneous().transpose(),
         view: view,
         projection: projection,
+        // Create a few lights with varying colors, intensities and locations
         lights: vec![
             Light::new_white(Point3::new(light_scale * -1.0, light_scale * 1.0, light_scale * -1.0), 9.0),
-            Light::new(Point3::new(light_scale * 1.0, light_scale * 1.0, light_scale * 1.0), 9.0, Color {
-                r: 0.6, g: 0.6, b: 1.0, a: 1.0,
-            }),
-            Light::new(Point3::new(light_scale * 0.0, light_scale * 3.0, light_scale * -1.0), 9.0, Color {
-                r: 1.0, g: 0.3, b: 0.3, a: 1.0,
-            }),
-            Light::new(Point3::new(light_scale * -2.0, light_scale * -1.0, light_scale * 1.0), 9.0, Color {
-                r: 0.7, g: 1.0, b: 0.7, a: 1.0,
-            }),
+            Light::new(Point3::new(light_scale * 1.0, light_scale * 1.0, light_scale * 1.0), 9.0, Color { r: 0.6, g: 0.6, b: 1.0, a: 1.0 }),
+            Light::new(Point3::new(light_scale * 0.0, light_scale * 3.0, light_scale * -1.0), 25.0, Color { r: 1.0, g: 0.3, b: 0.3, a: 1.0 }),
+            Light::new(Point3::new(light_scale * -2.0, light_scale * -1.0, light_scale * 1.0), 25.0, Color { r: 0.7, g: 1.0, b: 0.7, a: 1.0 }),
         ]
     }
 }
@@ -67,16 +62,25 @@ fn main() {
     // Create the image framebuffer with a near-black background
     let framebuffer = FrameBuffer::<Color>::new_with(1920, 1080, Color { r: 0.01, g: 0.01, b: 0.01, a: 1.0 });
 
+    // Create any global uniforms you wish the shaders to have access to.
     let global_uniforms = generate_global_uniforms(framebuffer.width() as f32 / framebuffer.height() as f32);
 
+    // Create the graphics pipeline from the spawned framebuffer
     let mut pipeline = Pipeline::new(framebuffer, global_uniforms);
 
+    // Load any meshes
     let meshes = self::mesh::load_model("assets/models/suzanne_highres.obj");
 
+    // Iterator through all the meshes
     for mesh in &meshes {
+        // Initialize the pipeline for mesh, and return the vertex_shader object
         let vertex_shader = pipeline.render_mesh(mesh.mesh.clone());
 
-        let fragment_shader = vertex_shader.run(self::shaders::vertex_shader);
+        // Run the vertex shader, which returns the fragment shader
+        let mut fragment_shader = vertex_shader.run(self::shaders::vertex_shader);
+
+        // Set our pixel blend function
+        fragment_shader.set_blend_function(|a, b| color::blend(a, b));
 
         fragment_shader.triangles(self::shaders::fragment_shader);
     }
