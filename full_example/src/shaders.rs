@@ -46,7 +46,7 @@ pub fn fragment_shader(vertex: &ScreenVertex<Uniforms>, global_uniforms: &Global
     let view_dir = (camera - position).normalize();
 
     // Specular "shininess", almost like a roughness parameter but not really.
-    let shininess = 32.0;
+    let shininess = 32;
 
     // Dark grey surface
     let material_color = decode_gamma(Color { r: 0.25, g: 0.25, b: 0.25, a: 1.0 }, SRGB_GAMMA);
@@ -80,7 +80,7 @@ pub fn fragment_shader(vertex: &ScreenVertex<Uniforms>, global_uniforms: &Global
         let diffuse = (1.0 - f) * NdotL;
 
         // simple Blinn-Phong specular
-        let specular = f * NdotH.powf(shininess * 2.0);
+        let specular = f * NdotH.powi(shininess * 2);
 
         // Add specular and diffuse colors together, multiple by light color,
         // and multiple by light intensity accounting for distance attenuation,
