@@ -16,7 +16,7 @@ pub trait ImageFrameBuffer<P, C> where P: image::Pixel {
 
 impl ImageFrameBuffer<image::Rgba<u8>, Vec<u8>> for FrameBuffer<RGBAf32Pixel> {
     fn copy_to_image(&self) -> Option<image::RgbaImage> {
-        let color_buffer: &Vec<RGBAf32Pixel> = self.color_buffer();
+        let color_buffer = self.color_buffer();
 
         let mut res = Vec::with_capacity(color_buffer.len() * 4);
 

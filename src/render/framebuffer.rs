@@ -89,24 +89,24 @@ impl<P: Pixel> FrameBuffer<P> {
     }
 
     /// Get a reference to the color buffer
-    pub fn color_buffer(&self) -> &Vec<P> { &self.color }
+    pub fn color_buffer(&self) -> &[P] { &self.color }
     /// Get a mutable reference to the color buffer
-    pub fn color_buffer_mut(&mut self) -> &mut Vec<P> { &mut self.color }
+    pub fn color_buffer_mut(&mut self) -> &mut [P] { &mut self.color }
 
     /// Get a reference to the depth buffer
-    pub fn depth_buffer(&self) -> &Vec<f32> { &self.depth }
+    pub fn depth_buffer(&self) -> &[f32] { &self.depth }
     /// Get a mutable reference to the depth buffer
-    pub fn depth_buffer_mut(&mut self) -> &mut Vec<f32> { &mut self.depth }
+    pub fn depth_buffer_mut(&mut self) -> &mut [f32] { &mut self.depth }
 
     /// Returns references to all buffers at once
     #[inline]
-    pub fn buffers(&self) -> (&Vec<P>, &Vec<f32>) {
+    pub fn buffers(&self) -> (&[P], &[f32]) {
         (&self.color, &self.depth)
     }
 
     /// Returns mutable references to all buffers at once
     #[inline]
-    pub fn buffers_mut(&mut self) -> (&mut Vec<P>, &mut Vec<f32>) {
+    pub fn buffers_mut(&mut self) -> (&mut [P], &mut [f32]) {
         (&mut self.color, &mut self.depth)
     }
 
