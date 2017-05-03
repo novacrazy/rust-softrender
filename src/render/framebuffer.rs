@@ -42,10 +42,7 @@ impl<P: Pixel> FrameBuffer<P> {
     /// Create a clone of the framebuffer with all the same properties but with pixels
     /// being uninitialized and with the `DEFAULT_DEPTH_VALUE` in the depth buffer
     pub fn empty_clone(&mut self) -> FrameBuffer<P> {
-        if let Some(mut fb) = self.cache.pop() {
-            fb.depth.copy_from_slice(&self.depth);
-            fb
-        } else {
+        if let Some(mut fb) = self.cache.pop() { fb } else {
             FrameBuffer {
                 width: self.width,
                 height: self.height,
@@ -100,8 +97,17 @@ impl<P: Pixel> FrameBuffer<P> {
 
     /// Sets all depth values to their default and the color values to the given pixel.
     pub fn clear_with(&mut self, pixel: P) {
-        for mut dv in &mut self.depth { *dv = DEFAULT_DEPTH_VALUE; }
+        self.clear_depth();
+
         for mut pv in &mut self.color { *pv = pixel; }
+
+        for pf in &mut self.cache {
+            pf.clear_depth();
+        }
+    }
+
+    pub fn clear_depth(&mut self) {
+        for mut dv in &mut self.depth { *dv = DEFAULT_DEPTH_VALUE; }
     }
 
     /// Get a reference to the color buffer
