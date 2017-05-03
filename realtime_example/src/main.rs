@@ -41,7 +41,7 @@ fn render_frame(mut pipeline: &mut Pipeline<GlobalUniforms, RenderColor>, meshes
 }
 
 fn main() {
-    let size = (1600, 900);
+    let size = (800, 600);
 
     // Create the image framebuffer with a near-black background
     let framebuffer = FrameBuffer::new_with(size.0, size.1, RenderColor { r: 0.01, g: 0.01, b: 0.01, a: 1.0 });

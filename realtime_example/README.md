@@ -1,10 +1,9 @@
-"realtime" example
-==================
+realtime example
+================
 
-This video was recorded using OBS at 60fps, so the framerate and 
-jerkiness of the rendering is because it really does take that long to render each frame.
+The following was rendered at 800x600 resolution.
 
-[!["realtime" example](http://i.imgur.com/SXZDHGX.png)](https://www.youtube.com/watch?v=7ZXaxtXFLEg)
+[![realtime example](http://i.imgur.com/TSCIp3j.png)](https://youtu.be/Izc-3Z-fhzM)
 
 This example was created to aid in profiling the renderer and improve its performance.
 
