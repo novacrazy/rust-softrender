@@ -11,7 +11,7 @@ use sdl2::keyboard::Keycode;
 use sdl2::pixels::{Color, PixelFormatEnum};
 use sdl2::rect::{Point, Rect};
 
-use softrender::render::{FrameBuffer, Pipeline};
+use softrender::render::{FrameBuffer, Pipeline, FaceWinding};
 use softrender::mesh::Mesh;
 use softrender::image_compat::ImageFrameBuffer;
 
@@ -33,6 +33,8 @@ fn render_frame(mut pipeline: &mut Pipeline<GlobalUniforms, RenderColor>, meshes
 
         // Set our pixel blend function
         fragment_shader.set_blend_function(|a, b| color::blend(a, b));
+
+        fragment_shader.cull_faces(Some(FaceWinding::Clockwise));
 
         fragment_shader.triangles(full_example::shaders::fragment_shader);
     }
