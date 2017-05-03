@@ -11,6 +11,7 @@ pub struct FrameBuffer<P: Pixel> {
     depth: Vec<f32>,
     color: Vec<P>,
     viewport: (f32, f32),
+    cache: Vec<FrameBuffer<P>>,
 }
 
 /// Default depth value, equal to the farthest away anything can be.
@@ -33,22 +34,37 @@ impl<P: Pixel> FrameBuffer<P> {
             height: height,
             depth: vec![DEFAULT_DEPTH_VALUE; len],
             color: vec![pixel; len],
-            viewport: (width as f32, height as f32)
+            viewport: (width as f32, height as f32),
+            cache: Vec::new(),
         }
     }
 
     /// Create a clone of the framebuffer with all the same properties but with pixels
-    /// being `Pixel::empty()` and with the `DEFAULT_DEPTH_VALUE` in the depth buffer
-    pub fn empty_clone(&self) -> FrameBuffer<P> {
-        let len = self.width as usize * self.height as usize;
+    /// being uninitialized and with the `DEFAULT_DEPTH_VALUE` in the depth buffer
+    pub fn empty_clone(&mut self) -> FrameBuffer<P> {
+        if let Some(mut fb) = self.cache.pop() {
+            fb.depth.copy_from_slice(&self.depth);
+            fb
+        } else {
+            FrameBuffer {
+                width: self.width,
+                height: self.height,
+                depth: self.depth.clone(),
+                color: {
+                    let mut empty = Vec::with_capacity(self.color.len());
 
-        FrameBuffer {
-            width: self.width,
-            height: self.height,
-            depth: self.depth.clone(),
-            color: vec![P::empty(); len],
-            viewport: self.viewport
+                    unsafe { empty.set_len(self.color.len()); }
+
+                    empty
+                },
+                viewport: self.viewport,
+                cache: Vec::new(),
+            }
         }
+    }
+
+    pub fn cache_empty_clone(&mut self, fb: FrameBuffer<P>) {
+        self.cache.push(fb)
     }
 
     /// Merges `self` into another framebuffer, taking into account the depth buffer and pixel blending.
