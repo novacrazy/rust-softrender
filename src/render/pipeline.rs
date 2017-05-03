@@ -343,8 +343,8 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
                 let ref a = screen_vertices[line[0] as usize];
                 let ref b = screen_vertices[line[1] as usize];
 
-                let (x1, y1) = (a.position.x, a.position.y);
-                let (x2, y2) = (b.position.x, b.position.y);
+                let XYZW { x: x1, y: y1, .. } = *a.position;
+                let XYZW { x: x2, y: y2, .. } = *b.position;
 
                 let d = (x1 - x2).hypot(y1 - y2);
 
@@ -450,8 +450,8 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
                 let ref c = screen_vertices[triangle[2] as usize];
 
                 for &(a, b) in &[(a, b), (b, c), (c, a)] {
-                    let (x1, y1) = (a.position.x, a.position.y);
-                    let (x2, y2) = (b.position.x, b.position.y);
+                    let XYZW { x: x1, y: y1, .. } = *a.position;
+                    let XYZW { x: x2, y: y2, .. } = *b.position;
 
                     let d = (x1 - x2).hypot(y1 - y2);
 
@@ -561,9 +561,9 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
                     let ref b = screen_vertices[triangle[1] as usize];
                     let ref c = screen_vertices[triangle[2] as usize];
 
-                    let (x1, y1) = (a.position.x, a.position.y);
-                    let (x2, y2) = (b.position.x, b.position.y);
-                    let (x3, y3) = (c.position.x, c.position.y);
+                    let XYZW { x: x1, y: y1, .. } = *a.position;
+                    let XYZW { x: x2, y: y2, .. } = *b.position;
+                    let XYZW { x: x3, y: y3, .. } = *c.position;
 
                     let a = x1 * y2 + x2 * y3 + x3 * y1 - x2 * y1 - x3 * y2 - x1 * y3;
 
@@ -584,9 +584,9 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
             let ref b = screen_vertices[triangle[1] as usize];
             let ref c = screen_vertices[triangle[2] as usize];
 
-            let (x1, y1) = (a.position.x, a.position.y);
-            let (x2, y2) = (b.position.x, b.position.y);
-            let (x3, y3) = (c.position.x, c.position.y);
+            let XYZW { x: x1, y: y1, .. } = *a.position;
+            let XYZW { x: x2, y: y2, .. } = *b.position;
+            let XYZW { x: x3, y: y3, .. } = *c.position;
 
             // find x bounds for the bounding box
             let min_x: usize = clamp(x1.min(x2).min(x3).floor() as usize, 0, bb.0);
