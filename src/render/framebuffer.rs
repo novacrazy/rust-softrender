@@ -42,7 +42,7 @@ impl<P: Pixel> FrameBuffer<P> {
     /// Create a clone of the framebuffer with all the same properties but with pixels
     /// being uninitialized and with the `DEFAULT_DEPTH_VALUE` in the depth buffer
     pub fn empty_clone(&mut self) -> FrameBuffer<P> {
-        if let Some(mut fb) = self.cache.pop() { fb } else {
+        if let Some(fb) = self.cache.pop() { fb } else {
             FrameBuffer {
                 width: self.width,
                 height: self.height,
