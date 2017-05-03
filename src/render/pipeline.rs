@@ -1,6 +1,6 @@
 //! Rendering pipeline implementation
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use rayon::prelude::*;
 use rayon::current_num_threads;
@@ -258,21 +258,18 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
             ..
         } = self;
 
-        let blend_func = &*blend_func;
+        // Bounding box for the entire view space
+        let bb = (framebuffer.width() as f32,
+                  framebuffer.height() as f32);
 
-        // template framebuffer for the render framebuffers, allowing the real framebuffer to be borrowed mutably later on.
-        let empty_framebuffer = framebuffer.empty_clone();
+        let framebuffer = Mutex::new(framebuffer);
 
         // Only allow as many new empty framebuffer clones as their are running threads, so one framebuffer per thread.
         // This has the benefit of running a large of number of triangles sequentially.
         let points_per_thread = mesh.indices.len() / current_num_threads();
 
-        // Bounding box for points in framebuffer
-        let bb = (framebuffer.width() as f32,
-                  framebuffer.height() as f32);
-
         let partial_framebuffers = mesh.indices.par_iter().cloned().with_min_len(points_per_thread).fold(
-            || { empty_framebuffer.empty_clone() }, |mut framebuffer: FrameBuffer<P>, index| {
+            || { framebuffer.lock().unwrap().empty_clone() }, |mut framebuffer: FrameBuffer<P>, index| {
                 let ref vertex = screen_vertices[index as usize];
 
                 let XYZW { x, y, z, .. } = *vertex.position;
@@ -303,10 +300,13 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
         // Merge incoming partial framebuffers in parallel
         partial_framebuffers.reduce_with(|mut a, b| {
             b.merge_into(&mut a, &blend_func);
+            framebuffer.lock().unwrap().cache_empty_clone(b);
             a
         }).map(|final_framebuffer| {
+            let mut framebuffer = framebuffer.lock().unwrap();
             // Merge final framebuffer into external framebuffer
-            final_framebuffer.merge_into(framebuffer, &blend_func);
+            final_framebuffer.merge_into(&mut *framebuffer, &blend_func);
+            framebuffer.cache_empty_clone(final_framebuffer)
         });
     }
 
@@ -332,15 +332,14 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
         let bb = (framebuffer.width() - 1,
                   framebuffer.height() - 1);
 
-        // template framebuffer for the render framebuffers, allowing the real framebuffer to be borrowed mutably later on.
-        let empty_framebuffer = framebuffer.empty_clone();
+        let framebuffer = Mutex::new(framebuffer);
 
         // Only allow as many new empty framebuffer clones as their are running threads, so one framebuffer per thread.
         // This has the benefit of running a large of number of triangles sequentially.
         let lines_per_thread = mesh.indices.len() / (2 * current_num_threads());
 
         let partial_framebuffers = mesh.indices.par_chunks(2).with_min_len(lines_per_thread).filter(|line| line.len() == 2).fold(
-            || { empty_framebuffer.empty_clone() }, |mut framebuffer: FrameBuffer<P>, line| {
+            || { framebuffer.lock().unwrap().empty_clone() }, |mut framebuffer: FrameBuffer<P>, line| {
                 let ref a = screen_vertices[line[0] as usize];
                 let ref b = screen_vertices[line[1] as usize];
 
@@ -408,12 +407,16 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
         // Merge incoming partial framebuffers in parallel
         partial_framebuffers.reduce_with(|mut a, b| {
             b.merge_into(&mut a, &blend_func);
+            framebuffer.lock().unwrap().cache_empty_clone(b);
             a
         }).map(|final_framebuffer| {
+            let mut framebuffer = framebuffer.lock().unwrap();
             // Merge final framebuffer into external framebuffer
-            final_framebuffer.merge_into(framebuffer, &blend_func);
+            final_framebuffer.merge_into(&mut *framebuffer, &blend_func);
+            framebuffer.cache_empty_clone(final_framebuffer)
         });
     }
+
 
     /// Render a wireframe for every triangle in the mesh. Shading it done along the lines using linear
     /// interpolation for uniforms in the connected vertices.
@@ -434,15 +437,14 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
         let bb = (framebuffer.width() - 1,
                   framebuffer.height() - 1);
 
-        // template framebuffer for the render framebuffers, allowing the real framebuffer to be borrowed mutably later on.
-        let empty_framebuffer = framebuffer.empty_clone();
+        let framebuffer = Mutex::new(framebuffer);
 
         // Only allow as many new empty framebuffer clones as their are running threads, so one framebuffer per thread.
         // This has the benefit of running a large of number of triangles sequentially.
         let triangles_per_thread = mesh.indices.len() / (3 * current_num_threads());
 
         let partial_framebuffers = mesh.indices.par_chunks(3).with_min_len(triangles_per_thread).filter(|triangle| triangle.len() == 3).fold(
-            || { empty_framebuffer.empty_clone() }, |mut framebuffer: FrameBuffer<P>, triangle| {
+            || { framebuffer.lock().unwrap().empty_clone() }, |mut framebuffer: FrameBuffer<P>, triangle| {
                 let ref a = screen_vertices[triangle[0] as usize];
                 let ref b = screen_vertices[triangle[1] as usize];
                 let ref c = screen_vertices[triangle[2] as usize];
@@ -510,10 +512,13 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
         // Merge incoming partial framebuffers in parallel
         partial_framebuffers.reduce_with(|mut a, b| {
             b.merge_into(&mut a, &blend_func);
+            framebuffer.lock().unwrap().cache_empty_clone(b);
             a
         }).map(|final_framebuffer| {
+            let mut framebuffer = framebuffer.lock().unwrap();
             // Merge final framebuffer into external framebuffer
-            final_framebuffer.merge_into(framebuffer, &blend_func);
+            final_framebuffer.merge_into(&mut *framebuffer, &blend_func);
+            framebuffer.cache_empty_clone(final_framebuffer)
         });
     }
 
@@ -533,12 +538,13 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
 
         let blend_func = &*blend_func;
 
-        // Bounding box for the entire view space
-        let bb = (framebuffer.width() - 1,
-                  framebuffer.height() - 1);
+        let (width, height) = (framebuffer.width() as usize,
+                               framebuffer.height() as usize);
 
-        // template framebuffer for the render framebuffers, allowing the real framebuffer to be borrowed mutably later on.
-        let empty_framebuffer = framebuffer.empty_clone();
+        // Bounding box for the entire view space
+        let bb = (width - 1, height - 1);
+
+        let framebuffer = Mutex::new(framebuffer);
 
         // Only allow as many new empty framebuffer clones as their are running threads, so one framebuffer per thread.
         // This has the benefit of running a large of number of triangles sequentially.
@@ -547,8 +553,6 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
         let partial_framebuffers = mesh.indices.par_chunks(3).with_min_len(triangles_per_thread).filter(|triangle| {
             // if there are three points at all, go ahead
             if triangle.len() == 3 {
-                //TODO: Check if triangle is on screen at all.
-
                 // If there is a winding order for culling,
                 // compare it to the triangle winding order,
                 // otherwise go ahead
@@ -561,10 +565,10 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
                     let (x2, y2) = (b.position.x, b.position.y);
                     let (x3, y3) = (c.position.x, c.position.y);
 
-                    let area2 = -x2 * y1 + 2.0 * x3 * y1 + x1 * y2 - x3 * y2 + 2.0 * x1 * y3 + x2 * y3;
+                    let a = x1 * y2 + x2 * y3 + x3 * y1 - x2 * y1 - x3 * y2 - x1 * y3;
 
                     // Check if the winding order matches the desired order
-                    if winding == if area2.is_sign_negative() { FaceWinding::Clockwise } else { FaceWinding::CounterClockwise } {
+                    if winding == if a.is_sign_negative() { FaceWinding::Clockwise } else { FaceWinding::CounterClockwise } {
                         true
                     } else {
                         false
@@ -575,7 +579,7 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
             } else {
                 false
             }
-        }).fold(|| { empty_framebuffer.empty_clone() }, |mut framebuffer: FrameBuffer<P>, triangle| {
+        }).fold(|| { framebuffer.lock().unwrap().empty_clone() }, |mut framebuffer: FrameBuffer<P>, triangle| {
             let ref a = screen_vertices[triangle[0] as usize];
             let ref b = screen_vertices[triangle[1] as usize];
             let ref c = screen_vertices[triangle[2] as usize];
@@ -585,67 +589,79 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
             let (x3, y3) = (c.position.x, c.position.y);
 
             // find x bounds for the bounding box
-            let min_x: u32 = clamp(x1.min(x2).min(x3).floor() as u32, 0, bb.0);
-            let max_x: u32 = clamp(x1.max(x2).max(x3).ceil() as u32, 0, bb.0);
+            let min_x: usize = clamp(x1.min(x2).min(x3).floor() as usize, 0, bb.0);
+            let max_x: usize = clamp(x1.max(x2).max(x3).ceil() as usize, 0, bb.0);
 
             // find y bounds for the bounding box
-            let min_y: u32 = clamp(y1.min(y2).min(y3).floor() as u32, 0, bb.1);
-            let max_y: u32 = clamp(y1.max(y2).max(y3).ceil() as u32, 0, bb.1);
+            let min_y: usize = clamp(y1.min(y2).min(y3).floor() as usize, 0, bb.1);
+            let max_y: usize = clamp(y1.max(y2).max(y3).ceil() as usize, 0, bb.1);
 
-            let mut py = min_y;
+            let dx = width - (max_x - min_x + 1);
 
-            while py <= max_y {
-                let mut px = min_x;
+            {
+                let (color, depth) = framebuffer.buffers_mut();
 
-                while px <= max_x {
-                    // Real screen position should be in the center of the pixel.
-                    let (x, y) = (px as f32 + 0.5,
-                                  py as f32 + 0.5);
+                let mut index = min_y * width + min_x;
 
-                    // calculate determinant
-                    let det = (y2 - y3) * (x1 - x3) + (x3 - x2) * (y1 - y3);
+                let mut py = min_y;
 
-                    // calculate barycentric coordinates of the current point
-                    let u = ((y2 - y3) * (x - x3) + (x3 - x2) * (y - y3)) / det;
-                    let v = ((y3 - y1) * (x - x3) + (x1 - x3) * (y - y3)) / det;
-                    let w = 1.0 - u - v;
+                while py <= max_y {
+                    let mut px = min_x;
 
-                    // check if the point is inside the triangle at all
-                    if u >= 0.0 && v >= 0.0 && w >= 0.0 {
-                        // interpolate screen-space position
-                        let position = a.position * u + b.position * v + c.position * w;
+                    while px <= max_x {
+                        // Real screen position should be in the center of the pixel.
+                        let (x, y) = (px as f32 + 0.5,
+                                      py as f32 + 0.5);
 
-                        // don't render pixels "behind" the camera
-                        if position.z > 0.0 {
-                            let (fc, fd) = unsafe { framebuffer.pixel_depth_mut(px, py) };
+                        // calculate determinant
+                        let det = (y2 - y3) * (x1 - x3) + (x3 - x2) * (y1 - y3);
 
-                            // skip fragments that are behind over previous fragments
-                            if position.z < *fd {
-                                // run fragment shader
-                                let fragment = fragment_shader(&ScreenVertex {
-                                    position: position,
-                                    // interpolate the uniforms
-                                    uniforms: Barycentric::interpolate(u, &a.uniforms,
-                                                                       v, &b.uniforms,
-                                                                       w, &c.uniforms),
-                                }, &uniforms);
+                        // calculate barycentric coordinates of the current point
+                        let u = ((y2 - y3) * (x - x3) + (x3 - x2) * (y - y3)) / det;
+                        let v = ((y3 - y1) * (x - x3) + (x1 - x3) * (y - y3)) / det;
+                        let w = 1.0 - u - v;
 
-                                match fragment {
-                                    Fragment::Color(c) => {
-                                        // blend pixels together and set the new depth value
-                                        *fc = (*blend_func)(c, *fc);
-                                        *fd = position.z;
-                                    }
-                                    Fragment::Discard => ()
-                                };
+                        // check if the point is inside the triangle at all
+                        if !(u < 0.0 || v < 0.0 || w < 0.0) {
+                            // interpolate screen-space position
+                            let position = a.position * u + b.position * v + c.position * w;
+
+                            // don't render pixels "behind" the camera
+                            if position.z > 0.0 {
+                                let fd = unsafe { depth.get_unchecked_mut(index) };
+
+                                // skip fragments that are behind over previous fragments
+                                if position.z < *fd {
+                                    // run fragment shader
+                                    let fragment = fragment_shader(&ScreenVertex {
+                                        position: position,
+                                        // interpolate the uniforms
+                                        uniforms: Barycentric::interpolate(u, &a.uniforms,
+                                                                           v, &b.uniforms,
+                                                                           w, &c.uniforms),
+                                    }, &uniforms);
+
+                                    match fragment {
+                                        Fragment::Color(c) => {
+                                            let fc = unsafe { color.get_unchecked_mut(index) };
+
+                                            // blend pixels together and set the new depth value
+                                            *fc = (*blend_func)(c, *fc);
+                                            *fd = position.z;
+                                        }
+                                        Fragment::Discard => ()
+                                    };
+                                }
                             }
                         }
+
+                        px += 1;
+                        index += 1;
                     }
 
-                    px += 1;
+                    py += 1;
+                    index += dx;
                 }
-
-                py += 1;
             }
 
             framebuffer
@@ -654,10 +670,13 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
         // Merge incoming partial framebuffers in parallel
         partial_framebuffers.reduce_with(|mut a, b| {
             b.merge_into(&mut a, &blend_func);
+            framebuffer.lock().unwrap().cache_empty_clone(b);
             a
         }).map(|final_framebuffer| {
+            let mut framebuffer = framebuffer.lock().unwrap();
             // Merge final framebuffer into external framebuffer
-            final_framebuffer.merge_into(framebuffer, &blend_func);
+            final_framebuffer.merge_into(&mut *framebuffer, &blend_func);
+            framebuffer.cache_empty_clone(final_framebuffer)
         });
     }
 }
