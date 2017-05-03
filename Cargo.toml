@@ -1,14 +1,14 @@
 [package]
 authors = ["Aaron Trent <novacrazy@gmail.com>"]
-name = "softrender"
 description = "Software Renderer in Rust"
-version = "0.1.0"
-license = "MIT"
-repository = "https://github.com/novacrazy/rust-softrender"
-readme = "README.md"
-keywords = ["render", "renderer", "rasterizer", "3d"]
 documentation = "https://docs.rs/softrender/"
 include = ["src/**/*", "Cargo.toml"]
+keywords = ["render", "renderer", "rasterizer", "3d"]
+license = "MIT"
+name = "softrender"
+readme = "README.md"
+repository = "https://github.com/novacrazy/rust-softrender"
+version = "0.1.0"
 
 [dependencies]
 nalgebra = "0.12"
@@ -22,10 +22,10 @@ version = "0.13"
 image = "0.13.0"
 tobj = "0.1.3"
 
-[features]
-default = []
-image_compat = ["image"]
-
 [[example]]
 name = "suzanne"
 required-features = ["image_compat"]
+
+[features]
+default = []
+image_compat = ["image"]
