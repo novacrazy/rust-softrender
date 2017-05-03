@@ -12,3 +12,11 @@ tobj = "0.1.3"
 [dependencies.softrender]
 features = ["image_compat"]
 path = "../"
+
+[lib]
+name = "full_example"
+path = "src/lib.rs"
+
+[[bin]]
+name = "main"
+path = "src/main.rs"
