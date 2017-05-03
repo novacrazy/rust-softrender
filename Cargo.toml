@@ -11,6 +11,7 @@ repository = "https://github.com/novacrazy/rust-softrender"
 version = "0.1.0"
 
 [dependencies]
+crossbeam = "0.2.10"
 nalgebra = "0.12"
 rayon = "0.7.0"
 

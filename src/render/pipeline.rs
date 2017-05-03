@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use rayon::prelude::*;
 use rayon::current_num_threads;
+use crossbeam::sync::SegQueue;
 
 use nalgebra::coordinates::XYZW;
 
@@ -161,10 +162,7 @@ impl<'a, V, U: 'a, P: 'static> VertexShader<'a, V, U, P> where V: Send + Sync,
 
         let viewport = framebuffer.viewport();
 
-        let vertices_per_thread = mesh.indices.len() / current_num_threads();
-
         let screen_vertices = mesh.vertices.par_iter()
-                                           .with_min_len(vertices_per_thread)
                                            .map(|vertex| {
                                                vertex_shader(vertex, &*uniforms)
                                                    .normalize(viewport)
@@ -546,17 +544,20 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
 
         let framebuffer = Mutex::new(framebuffer);
 
-        // Only allow as many new empty framebuffer clones as their are running threads, so one framebuffer per thread.
-        // This has the benefit of running a large of number of triangles sequentially.
-        let triangles_per_thread = mesh.indices.len() / (3 * current_num_threads());
+        let triangle_queue = SegQueue::new();
 
-        let partial_framebuffers = mesh.indices.par_chunks(3).with_min_len(triangles_per_thread).filter(|triangle| {
-            // if there are three points at all, go ahead
-            if triangle.len() == 3 {
-                // If there is a winding order for culling,
-                // compare it to the triangle winding order,
-                // otherwise go ahead
-                if let Some(winding) = cull_faces {
+        for chunk in mesh.indices.chunks(3 * 1024) {
+            triangle_queue.push(chunk);
+        }
+
+        let partial_framebuffers = (0..current_num_threads()).into_par_iter().map(|_| -> FrameBuffer<P> {
+            let mut framebuffer = framebuffer.lock().unwrap().empty_clone();
+
+            while let Some(chunk) = triangle_queue.try_pop() {
+                for triangle in chunk.chunks(3) {
+                    // skip incomplete triangles
+                    if triangle.len() != 3 { continue; }
+
                     let ref a = screen_vertices[triangle[0] as usize];
                     let ref b = screen_vertices[triangle[1] as usize];
                     let ref c = screen_vertices[triangle[2] as usize];
@@ -565,102 +566,90 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
                     let XYZW { x: x2, y: y2, .. } = *b.position;
                     let XYZW { x: x3, y: y3, .. } = *c.position;
 
-                    let a = x1 * y2 + x2 * y3 + x3 * y1 - x2 * y1 - x3 * y2 - x1 * y3;
+                    // do backface culling
+                    if let Some(winding) = cull_faces {
+                        let a = x1 * y2 + x2 * y3 + x3 * y1 - x2 * y1 - x3 * y2 - x1 * y3;
 
-                    // Check if the winding order matches the desired order
-                    if winding == if a.is_sign_negative() { FaceWinding::Clockwise } else { FaceWinding::CounterClockwise } {
-                        true
-                    } else {
-                        false
+                        if winding == if a.is_sign_negative() { FaceWinding::Clockwise } else { FaceWinding::CounterClockwise } {
+                            continue;
+                        }
                     }
-                } else {
-                    true
-                }
-            } else {
-                false
-            }
-        }).fold(|| { framebuffer.lock().unwrap().empty_clone() }, |mut framebuffer: FrameBuffer<P>, triangle| {
-            let ref a = screen_vertices[triangle[0] as usize];
-            let ref b = screen_vertices[triangle[1] as usize];
-            let ref c = screen_vertices[triangle[2] as usize];
 
-            let XYZW { x: x1, y: y1, .. } = *a.position;
-            let XYZW { x: x2, y: y2, .. } = *b.position;
-            let XYZW { x: x3, y: y3, .. } = *c.position;
+                    // calculate determinant
+                    let det = (y2 - y3) * (x1 - x3) + (x3 - x2) * (y1 - y3);
 
-            // find x bounds for the bounding box
-            let min_x: usize = clamp(x1.min(x2).min(x3).floor() as usize, 0, bb.0);
-            let max_x: usize = clamp(x1.max(x2).max(x3).ceil() as usize, 0, bb.0);
+                    // find x bounds for the bounding box
+                    let min_x: usize = clamp(x1.min(x2).min(x3) as usize, 0, bb.0);
+                    let max_x: usize = clamp(x1.max(x2).max(x3) as usize, 0, bb.0);
 
-            // find y bounds for the bounding box
-            let min_y: usize = clamp(y1.min(y2).min(y3).floor() as usize, 0, bb.1);
-            let max_y: usize = clamp(y1.max(y2).max(y3).ceil() as usize, 0, bb.1);
+                    // find y bounds for the bounding box
+                    let min_y: usize = clamp(y1.min(y2).min(y3) as usize, 0, bb.1);
+                    let max_y: usize = clamp(y1.max(y2).max(y3) as usize, 0, bb.1);
 
-            let dx = width - (max_x - min_x + 1);
+                    let dx = width - (max_x - min_x + 1);
 
-            {
-                let (color, depth) = framebuffer.buffers_mut();
+                    let (color, depth) = framebuffer.buffers_mut();
 
-                let mut index = min_y * width + min_x;
+                    let mut index = min_y * width + min_x;
 
-                let mut py = min_y;
+                    let mut py = min_y;
 
-                while py <= max_y {
-                    let mut px = min_x;
+                    while py <= max_y {
+                        let mut px = min_x;
 
-                    while px <= max_x {
-                        // Real screen position should be in the center of the pixel.
-                        let (x, y) = (px as f32 + 0.5,
-                                      py as f32 + 0.5);
+                        while px <= max_x {
+                            // Real screen position should be in the center of the pixel.
+                            let (x, y) = (px as f32 + 0.5,
+                                          py as f32 + 0.5);
 
-                        // calculate determinant
-                        let det = (y2 - y3) * (x1 - x3) + (x3 - x2) * (y1 - y3);
+                            // calculate barycentric coordinates of the current point
+                            let u = ((y2 - y3) * (x - x3) + (x3 - x2) * (y - y3)) / det;
+                            let v = ((y3 - y1) * (x - x3) + (x1 - x3) * (y - y3)) / det;
+                            let w = 1.0 - u - v;
 
-                        // calculate barycentric coordinates of the current point
-                        let u = ((y2 - y3) * (x - x3) + (x3 - x2) * (y - y3)) / det;
-                        let v = ((y3 - y1) * (x - x3) + (x1 - x3) * (y - y3)) / det;
-                        let w = 1.0 - u - v;
+                            // check if the point is inside the triangle at all
+                            if !(u < 0.0 || v < 0.0 || w < 0.0) {
+                                // interpolate screen-space position
+                                let position = a.position * u + b.position * v + c.position * w;
 
-                        // check if the point is inside the triangle at all
-                        if !(u < 0.0 || v < 0.0 || w < 0.0) {
-                            // interpolate screen-space position
-                            let position = a.position * u + b.position * v + c.position * w;
+                                let z = position.z;
 
-                            // don't render pixels "behind" the camera
-                            if position.z > 0.0 {
-                                let fd = unsafe { depth.get_unchecked_mut(index) };
+                                // don't render pixels "behind" the camera
+                                if z > 0.0 {
+                                    let fd = unsafe { depth.get_unchecked_mut(index) };
 
-                                // skip fragments that are behind over previous fragments
-                                if position.z < *fd {
-                                    // run fragment shader
-                                    let fragment = fragment_shader(&ScreenVertex {
-                                        position: position,
-                                        // interpolate the uniforms
-                                        uniforms: Barycentric::interpolate(u, &a.uniforms,
-                                                                           v, &b.uniforms,
-                                                                           w, &c.uniforms),
-                                    }, &uniforms);
+                                    // skip fragments that are behind over previous fragments
+                                    if z < *fd {
+                                        // run fragment shader
+                                        let fragment = fragment_shader(&ScreenVertex {
+                                            position: position,
+                                            // interpolate the uniforms
+                                            uniforms: Barycentric::interpolate(u, &a.uniforms,
+                                                                               v, &b.uniforms,
+                                                                               w, &c.uniforms),
+                                        }, &*uniforms);
 
-                                    match fragment {
-                                        Fragment::Color(c) => {
-                                            let fc = unsafe { color.get_unchecked_mut(index) };
+                                        match fragment {
+                                            Fragment::Color(c) => {
+                                                let fc = unsafe { color.get_unchecked_mut(index) };
 
-                                            // blend pixels together and set the new depth value
-                                            *fc = (*blend_func)(c, *fc);
-                                            *fd = position.z;
-                                        }
-                                        Fragment::Discard => ()
-                                    };
+                                                // blend pixels together and set the new depth value
+                                                *fc = (*blend_func)(c, *fc);
+                                                *fd = position.z;
+                                            }
+                                            Fragment::Discard => ()
+                                        };
+                                    }
                                 }
                             }
+
+                            px += 1;
+                            index += 1;
                         }
 
-                        px += 1;
-                        index += 1;
+                        py += 1;
+                        index += dx;
                     }
-
-                    py += 1;
-                    index += dx;
                 }
             }
 

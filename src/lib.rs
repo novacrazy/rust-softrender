@@ -50,10 +50,11 @@
 //! A potential solution to this would be to write an alternative pipeline meant for batch processing meshes,
 //! so memory allocation is done once per all meshes, but some more work needs to be done until I can plan that out in more detail.
 
-#![deny(missing_docs)]
+//#![deny(missing_docs)]
 
 extern crate nalgebra;
 extern crate rayon;
+extern crate crossbeam;
 
 #[cfg(feature = "image_compat")]
 extern crate image;

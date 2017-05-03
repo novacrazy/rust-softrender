@@ -34,7 +34,7 @@ fn render_frame(mut pipeline: &mut Pipeline<GlobalUniforms, RenderColor>, meshes
         // Set our pixel blend function
         fragment_shader.set_blend_function(|a, b| color::blend(a, b));
 
-        fragment_shader.cull_faces(Some(FaceWinding::Clockwise));
+        fragment_shader.cull_faces(Some(FaceWinding::CounterClockwise));
 
         fragment_shader.triangles(full_example::shaders::fragment_shader);
     }
