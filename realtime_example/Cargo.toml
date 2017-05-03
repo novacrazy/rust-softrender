@@ -1,0 +1,20 @@
+[package]
+authors = ["Aaron Trent <novacrazy@gmail.com>"]
+name = "realtime_example"
+version = "0.1.0"
+
+[dependencies]
+image = "0.13.0"
+nalgebra = "0.12.1"
+rayon = "0.7.0"
+tobj = "0.1.3"
+
+[dependencies.sdl2]
+git = "https://github.com/AngryLawyer/rust-sdl2"
+
+[dependencies.softrender]
+features = ["image_compat"]
+path = "../"
+
+[dependencies.softrender_full_example]
+path = "../full_example"
