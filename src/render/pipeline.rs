@@ -298,11 +298,11 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
             });
 
         // Merge incoming partial framebuffers in parallel
-        partial_framebuffers.reduce_with(|mut a, b| {
+        partial_framebuffers.reduce_with(|mut a, mut b| {
             b.merge_into(&mut a, &blend_func);
             framebuffer.lock().unwrap().cache_empty_clone(b);
             a
-        }).map(|final_framebuffer| {
+        }).map(|mut final_framebuffer| {
             let mut framebuffer = framebuffer.lock().unwrap();
             // Merge final framebuffer into external framebuffer
             final_framebuffer.merge_into(&mut *framebuffer, &blend_func);
@@ -405,11 +405,11 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
         );
 
         // Merge incoming partial framebuffers in parallel
-        partial_framebuffers.reduce_with(|mut a, b| {
+        partial_framebuffers.reduce_with(|mut a, mut b| {
             b.merge_into(&mut a, &blend_func);
             framebuffer.lock().unwrap().cache_empty_clone(b);
             a
-        }).map(|final_framebuffer| {
+        }).map(|mut final_framebuffer| {
             let mut framebuffer = framebuffer.lock().unwrap();
             // Merge final framebuffer into external framebuffer
             final_framebuffer.merge_into(&mut *framebuffer, &blend_func);
@@ -510,11 +510,11 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
             });
 
         // Merge incoming partial framebuffers in parallel
-        partial_framebuffers.reduce_with(|mut a, b| {
+        partial_framebuffers.reduce_with(|mut a, mut b| {
             b.merge_into(&mut a, &blend_func);
             framebuffer.lock().unwrap().cache_empty_clone(b);
             a
-        }).map(|final_framebuffer| {
+        }).map(|mut final_framebuffer| {
             let mut framebuffer = framebuffer.lock().unwrap();
             // Merge final framebuffer into external framebuffer
             final_framebuffer.merge_into(&mut *framebuffer, &blend_func);
@@ -668,11 +668,11 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
         });
 
         // Merge incoming partial framebuffers in parallel
-        partial_framebuffers.reduce_with(|mut a, b| {
+        partial_framebuffers.reduce_with(|mut a, mut b| {
             b.merge_into(&mut a, &blend_func);
             framebuffer.lock().unwrap().cache_empty_clone(b);
             a
-        }).map(|final_framebuffer| {
+        }).map(|mut final_framebuffer| {
             let mut framebuffer = framebuffer.lock().unwrap();
             // Merge final framebuffer into external framebuffer
             final_framebuffer.merge_into(&mut *framebuffer, &blend_func);

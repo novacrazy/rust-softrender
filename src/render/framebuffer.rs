@@ -65,9 +65,9 @@ impl<P: Pixel> FrameBuffer<P> {
     }
 
     /// Merges `self` into another framebuffer, taking into account the depth buffer and pixel blending.
-    pub fn merge_into(&self, mut other: &mut FrameBuffer<P>, blend_func: &Box<Fn(P, P) -> P + Send + Sync>) {
-        let (pcolor, pdepth) = self.buffers();
-        let (mut fcolor, mut fdepth) = other.buffers_mut();
+    pub fn merge_into(&mut self, mut other: &mut FrameBuffer<P>, blend_func: &Box<Fn(P, P) -> P + Send + Sync>) {
+        let (pcolor, pdepth) = self.buffers_mut();
+        let (fcolor, fdepth) = other.buffers_mut();
 
         debug_assert_eq!(pcolor.len(), fcolor.len());
         debug_assert_eq!(pdepth.len(), fdepth.len());
@@ -76,7 +76,7 @@ impl<P: Pixel> FrameBuffer<P> {
         for i in 0..pcolor.len() {
             unsafe {
                 let fd = fdepth.get_unchecked_mut(i);
-                let pd = pdepth.get_unchecked(i);
+                let pd = pdepth.get_unchecked_mut(i);
 
                 if *fd > *pd {
                     *fd = *pd;
@@ -85,6 +85,9 @@ impl<P: Pixel> FrameBuffer<P> {
 
                     let fc = fcolor.get_unchecked_mut(i);
                     *fc = (*blend_func)(*pc, *fc);
+                } else {
+                    // synchronize the depth values
+                    *pd = *fd;
                 }
             }
         }
