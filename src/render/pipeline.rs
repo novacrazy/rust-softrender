@@ -220,6 +220,25 @@ impl<'a, V, U: 'a, P> VertexShader<'a, V, U, P> where V: Send + Sync,
 
 impl<'a, V, U: 'a, K, P> GeometryShader<'a, V, U, K, P> where V: Send + Sync,
                                                               U: Send + Sync,
+                                                              K: Send + Sync + Barycentric,
+                                                              P: Pixel {
+    pub fn finish(self) -> FragmentShader<'a, V, U, K, P, ()> {
+        let viewport = self.framebuffer.viewport();
+
+        FragmentShader {
+            mesh: self.mesh,
+            uniforms: self.uniforms,
+            framebuffer: self.framebuffer,
+            indexed_vertices: Arc::new(self.indexed_vertices.into_par_iter().map(|vertex| vertex.normalize(viewport)).collect()),
+            created_vertices: Arc::new(self.created_vertices.into_par_iter().map(|vertex| vertex.normalize(viewport)).collect()),
+            cull_faces: None,
+            blend: (),
+        }
+    }
+}
+
+impl<'a, V, U: 'a, K, P> GeometryShader<'a, V, U, K, P> where V: Send + Sync,
+                                                              U: Send + Sync,
                                                               K: Send + Sync + Barycentric + Clone,
                                                               P: Pixel {
     pub fn duplicate<'b>(&'b mut self) -> GeometryShader<'b, V, U, K, P> where 'a: 'b {
@@ -317,20 +336,6 @@ impl<'a, V, U: 'a, K, P> GeometryShader<'a, V, U, K, P> where V: Send + Sync,
             // TODO
             None
         })
-    }
-
-    pub fn finish(self) -> FragmentShader<'a, V, U, K, P, ()> {
-        let viewport = self.framebuffer.viewport();
-
-        FragmentShader {
-            mesh: self.mesh,
-            uniforms: self.uniforms,
-            framebuffer: self.framebuffer,
-            indexed_vertices: Arc::new(self.indexed_vertices.into_par_iter().map(|vertex| vertex.normalize(viewport)).collect()),
-            created_vertices: Arc::new(self.created_vertices.into_par_iter().map(|vertex| vertex.normalize(viewport)).collect()),
-            cull_faces: None,
-            blend: (),
-        }
     }
 }
 
