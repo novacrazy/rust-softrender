@@ -1,5 +1,6 @@
 //! Rendering pipeline implementation
 
+use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, Mutex};
 
 use rayon::prelude::*;
@@ -12,6 +13,7 @@ use ::utils::clamp;
 use ::pixel::Pixel;
 use ::mesh::{Mesh, Vertex};
 
+use ::render::blend::Blend;
 use ::render::geometry::{FaceWinding, ClipVertex, ScreenVertex};
 use ::render::framebuffer::FrameBuffer;
 use ::render::uniform::Barycentric;
@@ -20,7 +22,7 @@ use ::render::uniform::Barycentric;
 ///
 /// By itself, it only holds the framebuffer and global uniforms,
 /// but it spawns the first shader stage using those.
-pub struct Pipeline<U, P> where P: Pixel, U: Send + Sync {
+pub struct Pipeline<U, P> where P: Pixel {
     framebuffer: FrameBuffer<P>,
     uniforms: U,
 }
@@ -36,12 +38,26 @@ pub struct Pipeline<U, P> where P: Pixel, U: Send + Sync {
 /// The vertex shader holds a reference to the pipeline framebuffer and global uniforms,
 /// and for the given mesh given to it when created.
 /// These cannot be modified while the vertex shader exists.
-pub struct VertexShader<'a, V, U: 'a, P: 'static> where V: Send + Sync,
-                                                        U: Send + Sync,
-                                                        P: Pixel {
+pub struct VertexShader<'a, V, U: 'a, P> where P: Pixel {
     mesh: Arc<Mesh<V>>,
     uniforms: &'a U,
     framebuffer: &'a mut FrameBuffer<P>,
+}
+
+/// Geometry shader stage
+///
+/// The geometry shader can edit and generate new vertices from the output of the vertex shader.
+///
+/// Examples of geometry shader usage are crude tessellation, vertex displacement,
+/// and geometry visualisations like normal vector lines.
+///
+/// The geometry shader can be ran multiple times.
+pub struct GeometryShader<'a, V, U: 'a, K, P> where P: Pixel {
+    mesh: Arc<Mesh<V>>,
+    uniforms: &'a U,
+    framebuffer: &'a mut FrameBuffer<P>,
+    indexed_vertices: Vec<ClipVertex<K>>,
+    created_vertices: Vec<ClipVertex<K>>,
 }
 
 /// Fragment shader stage.
@@ -58,16 +74,14 @@ pub struct VertexShader<'a, V, U: 'a, P: 'static> where V: Send + Sync,
 /// Uniforms passed from the vertex shader are interpolating inside the triangles using Barycentric interpolation,
 /// which is why it must satisfy the [`Barycentric`](../uniform/trait.Barycentric.html) trait, which can be automatically implemented for many types using the
 /// `declare_uniforms!` macro. See the documentation on that for more information on how to use it.
-pub struct FragmentShader<'a, V, U: 'a, K, P: 'static> where V: Send + Sync,
-                                                             U: Send + Sync,
-                                                             K: Send + Sync + Barycentric,
-                                                             P: Pixel {
+pub struct FragmentShader<'a, V, U: 'a, K, P, B = ()> where P: Pixel {
     mesh: Arc<Mesh<V>>,
     uniforms: &'a U,
     framebuffer: &'a mut FrameBuffer<P>,
-    screen_vertices: Arc<Vec<ScreenVertex<K>>>,
+    indexed_vertices: Arc<Vec<ScreenVertex<K>>>,
+    created_vertices: Arc<Vec<ScreenVertex<K>>>,
     cull_faces: Option<FaceWinding>,
-    blend_func: Arc<Box<Fn(P, P) -> P + Send + Sync>>,
+    blend: B,
 }
 
 ///////////////////////
@@ -105,9 +119,9 @@ impl<U, P> Pipeline<U, P> where U: Send + Sync,
     pub fn framebuffer_mut(&mut self) -> &mut FrameBuffer<P> { &mut self.framebuffer }
 }
 
-impl<'a, V, U: 'a, P: 'static> VertexShader<'a, V, U, P> where V: Send + Sync,
-                                                               U: Send + Sync,
-                                                               P: Pixel {
+impl<'a, V, U: 'a, P> VertexShader<'a, V, U, P> where V: Send + Sync,
+                                                      U: Send + Sync,
+                                                      P: Pixel {
     /// Duplicates all references to internal state to return a cloned vertex shader,
     /// though since the vertex shader itself has very little internal state at this point,
     /// it's not that useful.
@@ -152,8 +166,33 @@ impl<'a, V, U: 'a, P: 'static> VertexShader<'a, V, U, P> where V: Send + Sync,
     /// where `GlobalUniforms`, `VertexData` and `Uniforms` are data structures defined by you.
     ///
     /// See the [`full_example`](https://github.com/novacrazy/rust-softrender/tree/master/full_example) project for this in action.
-    pub fn run<S, K>(self, vertex_shader: S) -> FragmentShader<'a, V, U, K, P> where S: Fn(&Vertex<V>, &U) -> ClipVertex<K> + Sync,
+    pub fn run<S, K>(self, vertex_shader: S) -> GeometryShader<'a, V, U, K, P> where S: Fn(&Vertex<V>, &U) -> ClipVertex<K> + Sync,
                                                                                      K: Send + Sync + Barycentric {
+        let VertexShader {
+            mesh,
+            uniforms,
+            framebuffer
+        } = self;
+
+        let indexed_vertices = mesh.vertices.par_iter()
+                                            .map(|vertex| vertex_shader(vertex, uniforms))
+                                            .collect();
+
+        GeometryShader {
+            mesh: mesh,
+            uniforms: uniforms,
+            framebuffer: framebuffer,
+            indexed_vertices: indexed_vertices,
+            created_vertices: Vec::new(),
+        }
+    }
+
+    /// Same as `run`, but skips the geometry shader stage.
+    ///
+    /// This pathway does not do any clipping, so beware of that when rendering. However,
+    /// it is the fastest path, so the tradeoff may be acceptable for some use cases.
+    pub fn run_to_fragment<S, K, B>(self, vertex_shader: S) -> FragmentShader<'a, V, U, K, P, ()> where S: Fn(&Vertex<V>, &U) -> ClipVertex<K> + Sync,
+                                                                                                        K: Send + Sync + Barycentric {
         let VertexShader {
             mesh,
             uniforms,
@@ -162,20 +201,107 @@ impl<'a, V, U: 'a, P: 'static> VertexShader<'a, V, U, P> where V: Send + Sync,
 
         let viewport = framebuffer.viewport();
 
-        let screen_vertices = mesh.vertices.par_iter()
-                                           .map(|vertex| {
-                                               vertex_shader(vertex, &*uniforms)
-                                                   .normalize(viewport)
-                                           }).collect();
+        let indexed_vertices = mesh.vertices.par_iter()
+                                            .map(|vertex| vertex_shader(vertex, uniforms)
+                                                .normalize(viewport))
+                                            .collect();
 
         FragmentShader {
             mesh: mesh,
             uniforms: uniforms,
             framebuffer: framebuffer,
-            screen_vertices: Arc::new(screen_vertices),
+            indexed_vertices: Arc::new(indexed_vertices),
+            created_vertices: Arc::new(Vec::new()),
             cull_faces: None,
-            // Use empty "normal" blend by default
-            blend_func: Arc::new(Box::new(|s, _| s)),
+            blend: (),
+        }
+    }
+}
+
+impl<'a, V, U: 'a, K, P> GeometryShader<'a, V, U, K, P> where V: Send + Sync,
+                                                              U: Send + Sync,
+                                                              K: Send + Sync + Barycentric,
+                                                              P: Pixel {
+    pub fn duplicate<'b>(&'b mut self) -> GeometryShader<'b, V, U, K, P> where 'a: 'b, K: Clone {
+        /// Duplicate the geometry shader, and copies any processed geometry.
+        ///
+        /// Geometry are not synced between duplicated geometry shaders.
+        GeometryShader {
+            mesh: self.mesh.clone(),
+            uniforms: self.uniforms,
+            framebuffer: self.framebuffer,
+            indexed_vertices: self.indexed_vertices.clone(),
+            created_vertices: self.created_vertices.clone()
+        }
+    }
+
+    /// Runs the geometry shader on triangle primitives.
+    ///
+    /// See the documentation for `run_generic` for more info on how it works.
+    #[inline]
+    pub fn triangles<S>(self, geometry_shader: S) -> GeometryShader<'a, V, U, K, P> where S: Fn(&mut [ClipVertex<K>], &U) -> Option<Vec<ClipVertex<K>>> + Send + Sync + 'static {
+        self.run_generic(geometry_shader, 3)
+    }
+
+    /// Runs the geometry shader with the given number of vertices per primitive. For example, a triangle primitive would be three vertices.
+    ///
+    /// The geometry shader is allowed to modify existing vertices outputted by the vertex shader via it's parameters,
+    /// but also generate entire new primitives by returning them in a `Vec`.
+    ///
+    /// If the number of vertices returned by the geometry shader is not a multiple of the number of vertices,
+    /// the result is discarded, so make sure it's correct.
+    pub fn run_generic<S>(self, geometry_shader: S, primitive_vertices: usize) -> GeometryShader<'a, V, U, K, P> where S: Fn(&mut [ClipVertex<K>], &U) -> Option<Vec<ClipVertex<K>>> + Send + Sync + 'static {
+        let GeometryShader {
+            mesh,
+            uniforms,
+            framebuffer,
+            mut indexed_vertices,
+            mut created_vertices,
+        } = self;
+
+        let mut new_vertices = indexed_vertices.par_chunks_mut(primitive_vertices).filter_map(|primitive| {
+            geometry_shader(primitive, uniforms).and_then(|new_vertices| {
+                // Only accept new primitives of the same length
+                if new_vertices.len() % primitive_vertices == 0 { Some(new_vertices) } else { None }
+            })
+        }).reduce(|| Vec::new(), |mut new_a, mut new_b| {
+            new_a.append(&mut new_b);
+            new_a
+        });
+
+        created_vertices.append(&mut new_vertices);
+
+        GeometryShader {
+            mesh,
+            uniforms,
+            framebuffer,
+            indexed_vertices,
+            created_vertices,
+        }
+    }
+
+    /// Clips all triangles along the seven planes that define the view frustum.
+    ///
+    /// This will most likely generate new triangles for some cases,
+    /// but all intermediate uniforms will be interpolated so it shouldn't be noticeable.
+    pub fn clip_triangles(self) -> GeometryShader<'a, V, U, K, P> {
+        self.triangles(|triangle, uniforms| {
+            // TODO
+            None
+        })
+    }
+
+    pub fn finish(self) -> FragmentShader<'a, V, U, K, P, ()> {
+        let viewport = self.framebuffer.viewport();
+
+        FragmentShader {
+            mesh: self.mesh,
+            uniforms: self.uniforms,
+            framebuffer: self.framebuffer,
+            indexed_vertices: Arc::new(self.indexed_vertices.into_par_iter().map(|vertex| vertex.normalize(viewport)).collect()),
+            created_vertices: Arc::new(self.created_vertices.into_par_iter().map(|vertex| vertex.normalize(viewport)).collect()),
+            cull_faces: None,
+            blend: (),
         }
     }
 }
@@ -203,21 +329,52 @@ impl Default for LineStyle {
     fn default() -> LineStyle { LineStyle::ThinAA }
 }
 
-impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send + Sync,
-                                                                       U: Send + Sync,
-                                                                       K: Send + Sync + Barycentric,
-                                                                       P: Pixel {
+impl<'a, V, U: 'a, K, P, B> Deref for FragmentShader<'a, V, U, K, P, B> where P: Pixel,
+                                                                              B: Blend<P> {
+    type Target = B;
+    fn deref(&self) -> &B { &self.blend }
+}
+
+impl<'a, V, U: 'a, K, P, B> DerefMut for FragmentShader<'a, V, U, K, P, B> where P: Pixel,
+                                                                                 B: Blend<P> {
+    fn deref_mut(&mut self) -> &mut B { &mut self.blend }
+}
+
+impl<'a, V, U: 'a, K, P, O> FragmentShader<'a, V, U, K, P, O> where P: Pixel {
+    pub fn with_blend<B>(self, blend: B) -> FragmentShader<'a, V, U, K, P, B> where B: Blend<P> {
+        FragmentShader {
+            blend: blend,
+            mesh: self.mesh,
+            uniforms: self.uniforms,
+            framebuffer: self.framebuffer,
+            indexed_vertices: self.indexed_vertices,
+            created_vertices: self.created_vertices,
+            cull_faces: self.cull_faces,
+        }
+    }
+
+    pub fn with_default_blend<B>(self) -> FragmentShader<'a, V, U, K, P, B> where B: Blend<P> + Default {
+        self.with_blend(B::default())
+    }
+}
+
+impl<'a, V, U: 'a, K, P, B> FragmentShader<'a, V, U, K, P, B> where V: Send + Sync,
+                                                                    U: Send + Sync,
+                                                                    K: Send + Sync + Barycentric,
+                                                                    P: Pixel, B: Blend<P> {
     /// Duplicates all references to internal state to return a cloned fragment shader,
     /// which can be used to efficiently render the same geometry with different
     /// rasterization methods in quick succession.
-    pub fn duplicate<'b>(&'b mut self) -> FragmentShader<'b, V, U, K, P> where 'a: 'b {
+    pub fn duplicate<'b>(&'b mut self) -> FragmentShader<'b, V, U, K, P, B> where 'a: 'b,
+                                                                                  B: Clone {
         FragmentShader {
             mesh: self.mesh.clone(),
             uniforms: self.uniforms,
             framebuffer: self.framebuffer,
-            screen_vertices: self.screen_vertices.clone(),
+            indexed_vertices: self.indexed_vertices.clone(),
+            created_vertices: self.created_vertices.clone(),
             cull_faces: self.cull_faces.clone(),
-            blend_func: self.blend_func.clone()
+            blend: self.blend.clone()
         }
     }
 
@@ -226,298 +383,6 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
     #[inline(always)]
     pub fn cull_faces(&mut self, cull: Option<FaceWinding>) {
         self.cull_faces = cull;
-    }
-
-    /// Sets the blend function for blending pixels together.
-    ///
-    /// The first parameter passed to the blend function is the output of the fragment shader, the source color.
-    ///
-    /// The second parameter passed to the blend function is the existing value in the framebuffer to blend over.
-    ///
-    /// You can use the tool [Here](http://www.andersriggelsen.dk/glblendfunc.php) to see how OpenGL does blending,
-    /// and choose how you want to blend pixels.
-    ///
-    /// For a generic alpha-over blend function, check the Wikipedia article [Here](https://en.wikipedia.org/wiki/Alpha_compositing)
-    /// for the *over* color function.
-    #[inline(always)]
-    pub fn set_blend_function<F>(&mut self, f: F) where F: Fn(P, P) -> P + Send + Sync + 'static {
-        self.blend_func = Arc::new(Box::new(f));
-    }
-
-    /// Render the vertices as a point cloud. Shading is done per-vertex for a single pixel.
-    pub fn points<S>(self, fragment_shader: S) where S: Fn(&ScreenVertex<K>, &U) -> Fragment<P> + Send + Sync {
-        // Pull all variables out of self so we can borrow them individually.
-        let FragmentShader {
-            mesh,
-            uniforms,
-            framebuffer,
-            screen_vertices,
-            blend_func,
-            ..
-        } = self;
-
-        // Bounding box for the entire view space
-        let bb = (framebuffer.width() as f32,
-                  framebuffer.height() as f32);
-
-        let framebuffer = Mutex::new(framebuffer);
-
-        // Only allow as many new empty framebuffer clones as their are running threads, so one framebuffer per thread.
-        // This has the benefit of running a large of number of triangles sequentially.
-        let points_per_thread = mesh.indices.len() / current_num_threads();
-
-        let partial_framebuffers = mesh.indices.par_iter().cloned().with_min_len(points_per_thread).fold(
-            || { framebuffer.lock().unwrap().empty_clone() }, |mut framebuffer: FrameBuffer<P>, index| {
-                let ref vertex = screen_vertices[index as usize];
-
-                let XYZW { x, y, z, .. } = *vertex.position;
-
-                // don't render points "behind" or outside of the camera view
-                if 0.0 <= x && x < bb.0 && 0.0 <= y && y < bb.1 && z > 0.0 {
-                    let px = x as u32;
-                    let py = y as u32;
-
-                    if framebuffer.check_coordinate(px, py) {
-                        let (fc, fd) = unsafe { framebuffer.pixel_depth_mut(px, py) };
-
-                        if z < *fd {
-                            match fragment_shader(vertex, &uniforms) {
-                                Fragment::Color(c) => {
-                                    *fc = (*blend_func)(c, *fc);
-                                    *fd = z;
-                                }
-                                Fragment::Discard => ()
-                            };
-                        }
-                    }
-                }
-
-                framebuffer
-            });
-
-        // Merge incoming partial framebuffers in parallel
-        partial_framebuffers.reduce_with(|mut a, mut b| {
-            b.merge_into(&mut a, &blend_func);
-            framebuffer.lock().unwrap().cache_empty_clone(b);
-            a
-        }).map(|mut final_framebuffer| {
-            let mut framebuffer = framebuffer.lock().unwrap();
-            // Merge final framebuffer into external framebuffer
-            final_framebuffer.merge_into(&mut *framebuffer, &blend_func);
-            framebuffer.cache_empty_clone(final_framebuffer)
-        });
-    }
-
-    /// Vertices 0 and 1 are considered a line. Vertices 2 and 3 are considered a line. And so on.
-    ///
-    /// If the user specifies a non-even number of vertices, then the extra vertex is ignored.
-    ///
-    /// Equivalent to `GL_LINES` primitive
-    pub fn lines<S>(self, fragment_shader: S, style: LineStyle) where S: Fn(&ScreenVertex<K>, &U) -> Fragment<P> + Send + Sync {
-        // Pull all variables out of self so we can borrow them individually.
-        let FragmentShader {
-            mesh,
-            uniforms,
-            framebuffer,
-            screen_vertices,
-            blend_func,
-            ..
-        } = self;
-
-        let blend_func = &*blend_func;
-
-        // Bounding box for the entire view space
-        let bb = (framebuffer.width() - 1,
-                  framebuffer.height() - 1);
-
-        let framebuffer = Mutex::new(framebuffer);
-
-        // Only allow as many new empty framebuffer clones as their are running threads, so one framebuffer per thread.
-        // This has the benefit of running a large of number of triangles sequentially.
-        let lines_per_thread = mesh.indices.len() / (2 * current_num_threads());
-
-        let partial_framebuffers = mesh.indices.par_chunks(2).with_min_len(lines_per_thread).filter(|line| line.len() == 2).fold(
-            || { framebuffer.lock().unwrap().empty_clone() }, |mut framebuffer: FrameBuffer<P>, line| {
-                let ref a = screen_vertices[line[0] as usize];
-                let ref b = screen_vertices[line[1] as usize];
-
-                let XYZW { x: x1, y: y1, .. } = *a.position;
-                let XYZW { x: x2, y: y2, .. } = *b.position;
-
-                let d = (x1 - x2).hypot(y1 - y2);
-
-                {
-                    let plot_fragment = |x, y, alpha| {
-                        if x >= 0 && y >= 0 {
-                            let x = x as u32;
-                            let y = y as u32;
-
-                            if x <= bb.0 && y <= bb.1 {
-                                let d1 = (x1 - x as f32).hypot(y1 - y as f32);
-
-                                let t = d1 / d;
-
-                                let position = a.position * (1.0 - t) + b.position * t;
-
-                                // Don't render pixels "behind" the camera
-                                if position.z > 0.0 {
-                                    if framebuffer.check_coordinate(x, y) {
-                                        let (fc, fd) = unsafe { framebuffer.pixel_depth_mut(x, y) };
-
-                                        if position.z < *fd {
-                                            // run fragment shader
-                                            let fragment = fragment_shader(&ScreenVertex {
-                                                position: position,
-                                                uniforms: Barycentric::interpolate((1.0 - t), &a.uniforms,
-                                                                                   t, &b.uniforms,
-                                                                                   0.0, &b.uniforms),
-                                            }, &uniforms);
-
-                                            match fragment {
-                                                Fragment::Color(c) => {
-                                                    // blend pixels together and set the new depth value
-                                                    *fc = (*blend_func)(c.mul_alpha(alpha as f32), *fc);
-                                                    *fd = 0.0;
-                                                }
-                                                Fragment::Discard => ()
-                                            };
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    };
-
-                    match style {
-                        LineStyle::Thin => {
-                            ::render::line::draw_line_bresenham(x1 as i64, y1 as i64, x2 as i64, y2 as i64, plot_fragment);
-                        }
-                        LineStyle::ThinAA => {
-                            ::render::line::draw_line_xiaolin_wu(x1 as f64, y1 as f64, x2 as f64, y2 as f64, plot_fragment);
-                        }
-                    }
-                }
-
-                framebuffer
-            }
-        );
-
-        // Merge incoming partial framebuffers in parallel
-        partial_framebuffers.reduce_with(|mut a, mut b| {
-            b.merge_into(&mut a, &blend_func);
-            framebuffer.lock().unwrap().cache_empty_clone(b);
-            a
-        }).map(|mut final_framebuffer| {
-            let mut framebuffer = framebuffer.lock().unwrap();
-            // Merge final framebuffer into external framebuffer
-            final_framebuffer.merge_into(&mut *framebuffer, &blend_func);
-            framebuffer.cache_empty_clone(final_framebuffer)
-        });
-    }
-
-
-    /// Render a wireframe for every triangle in the mesh. Shading it done along the lines using linear
-    /// interpolation for uniforms in the connected vertices.
-    pub fn wireframe<S>(self, fragment_shader: S, style: LineStyle) where S: Fn(&ScreenVertex<K>, &U) -> Fragment<P> + Send + Sync {
-        // Pull all variables out of self so we can borrow them individually.
-        let FragmentShader {
-            mesh,
-            uniforms,
-            framebuffer,
-            screen_vertices,
-            blend_func,
-            ..
-        } = self;
-
-        let blend_func = &*blend_func;
-
-        // Bounding box for the entire view space
-        let bb = (framebuffer.width() - 1,
-                  framebuffer.height() - 1);
-
-        let framebuffer = Mutex::new(framebuffer);
-
-        // Only allow as many new empty framebuffer clones as their are running threads, so one framebuffer per thread.
-        // This has the benefit of running a large of number of triangles sequentially.
-        let triangles_per_thread = mesh.indices.len() / (3 * current_num_threads());
-
-        let partial_framebuffers = mesh.indices.par_chunks(3).with_min_len(triangles_per_thread).filter(|triangle| triangle.len() == 3).fold(
-            || { framebuffer.lock().unwrap().empty_clone() }, |mut framebuffer: FrameBuffer<P>, triangle| {
-                let ref a = screen_vertices[triangle[0] as usize];
-                let ref b = screen_vertices[triangle[1] as usize];
-                let ref c = screen_vertices[triangle[2] as usize];
-
-                for &(a, b) in &[(a, b), (b, c), (c, a)] {
-                    let XYZW { x: x1, y: y1, .. } = *a.position;
-                    let XYZW { x: x2, y: y2, .. } = *b.position;
-
-                    let d = (x1 - x2).hypot(y1 - y2);
-
-                    let plot_fragment = |x, y, alpha| {
-                        if x >= 0 && y >= 0 {
-                            let x = x as u32;
-                            let y = y as u32;
-
-                            if x <= bb.0 && y <= bb.1 {
-                                let d1 = (x1 - x as f32).hypot(y1 - y as f32);
-
-                                let t = d1 / d;
-
-                                let position = a.position * (1.0 - t) + b.position * t;
-
-                                // Don't render pixels "behind" the camera
-                                if position.z > 0.0 {
-                                    if framebuffer.check_coordinate(x, y) {
-                                        let (fc, fd) = unsafe { framebuffer.pixel_depth_mut(x, y) };
-
-                                        if position.z < *fd {
-                                            // run fragment shader
-                                            let fragment = fragment_shader(&ScreenVertex {
-                                                position: position,
-                                                uniforms: Barycentric::interpolate((1.0 - t), &a.uniforms,
-                                                                                   t, &b.uniforms,
-                                                                                   0.0, &b.uniforms),
-                                            }, &uniforms);
-
-                                            match fragment {
-                                                Fragment::Color(c) => {
-                                                    // blend pixels together and set the new depth value
-                                                    *fc = (*blend_func)(c.mul_alpha(alpha as f32), *fc);
-                                                    *fd = 0.0;
-                                                }
-                                                Fragment::Discard => ()
-                                            };
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    };
-
-                    match style {
-                        LineStyle::Thin => {
-                            ::render::line::draw_line_bresenham(x1 as i64, y1 as i64, x2 as i64, y2 as i64, plot_fragment);
-                        }
-                        LineStyle::ThinAA => {
-                            ::render::line::draw_line_xiaolin_wu(x1 as f64, y1 as f64, x2 as f64, y2 as f64, plot_fragment);
-                        }
-                    }
-                }
-
-                framebuffer
-            });
-
-        // Merge incoming partial framebuffers in parallel
-        partial_framebuffers.reduce_with(|mut a, mut b| {
-            b.merge_into(&mut a, &blend_func);
-            framebuffer.lock().unwrap().cache_empty_clone(b);
-            a
-        }).map(|mut final_framebuffer| {
-            let mut framebuffer = framebuffer.lock().unwrap();
-            // Merge final framebuffer into external framebuffer
-            final_framebuffer.merge_into(&mut *framebuffer, &blend_func);
-            framebuffer.cache_empty_clone(final_framebuffer)
-        });
     }
 
     /// Rasterize the given vertices as triangles.
@@ -529,12 +394,11 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
             mesh,
             uniforms,
             framebuffer,
-            screen_vertices,
+            indexed_vertices,
+            created_vertices,
             cull_faces,
-            blend_func
+            blend
         } = self;
-
-        let blend_func = &*blend_func;
 
         let (width, height) = (framebuffer.width() as usize,
                                framebuffer.height() as usize);
@@ -544,8 +408,11 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
 
         let framebuffer = Mutex::new(framebuffer);
 
-        let triangle_queue = SegQueue::new();
+        let triangle_queue: SegQueue<&[u32]> = SegQueue::new();
 
+        // Use chunks of 1024 triangles, giving a balance between granularity and per-chunk performance.
+        // For example, a mesh with 4 million triangles will have about 4,000 chunks, and a mesh with 16,000 triangles will have
+        // about 16 chunks, so even on small meshes there is a chance for threads to steal the other's work just a little.
         for chunk in mesh.indices.chunks(3 * 1024) {
             triangle_queue.push(chunk);
         }
@@ -558,9 +425,9 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
                     // skip incomplete triangles
                     if triangle.len() != 3 { continue; }
 
-                    let ref a = screen_vertices[triangle[0] as usize];
-                    let ref b = screen_vertices[triangle[1] as usize];
-                    let ref c = screen_vertices[triangle[2] as usize];
+                    let ref a = indexed_vertices[triangle[0] as usize];
+                    let ref b = indexed_vertices[triangle[1] as usize];
+                    let ref c = indexed_vertices[triangle[2] as usize];
 
                     let XYZW { x: x1, y: y1, .. } = *a.position;
                     let XYZW { x: x2, y: y2, .. } = *b.position;
@@ -619,7 +486,7 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
                                     let fd = unsafe { depth.get_unchecked_mut(index) };
 
                                     // skip fragments that are behind over previous fragments
-                                    if z < *fd {
+                                    if z < *fd || blend.ignore_depth() {
                                         // run fragment shader
                                         let fragment = fragment_shader(&ScreenVertex {
                                             position: position,
@@ -633,9 +500,8 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
                                             Fragment::Color(c) => {
                                                 let fc = unsafe { color.get_unchecked_mut(index) };
 
-                                                // blend pixels together and set the new depth value
-                                                *fc = (*blend_func)(c, *fc);
-                                                *fd = position.z;
+                                                *fc = blend.blend_by_depth(z, *fd, c, *fc);
+                                                *fd = z;
                                             }
                                             Fragment::Discard => ()
                                         };
@@ -658,13 +524,13 @@ impl<'a, V, U: 'a, K, P: 'static> FragmentShader<'a, V, U, K, P> where V: Send +
 
         // Merge incoming partial framebuffers in parallel
         partial_framebuffers.reduce_with(|mut a, mut b| {
-            b.merge_into(&mut a, &blend_func);
+            b.merge_into(&mut a, &blend);
             framebuffer.lock().unwrap().cache_empty_clone(b);
             a
         }).map(|mut final_framebuffer| {
             let mut framebuffer = framebuffer.lock().unwrap();
             // Merge final framebuffer into external framebuffer
-            final_framebuffer.merge_into(&mut *framebuffer, &blend_func);
+            final_framebuffer.merge_into(&mut *framebuffer, &blend);
             framebuffer.cache_empty_clone(final_framebuffer)
         });
     }
