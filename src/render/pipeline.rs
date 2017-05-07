@@ -13,10 +13,7 @@ use ::utils::clamp;
 use ::pixel::Pixel;
 use ::mesh::{Mesh, Vertex};
 
-use ::render::blend::Blend;
-use ::render::geometry::{FaceWinding, ClipVertex, ScreenVertex};
-use ::render::framebuffer::FrameBuffer;
-use ::render::uniform::Barycentric;
+use ::render::{FrameBuffer, ClipVertex, ScreenVertex, FaceWinding, Interpolate, Blend};
 
 /// Starting point for the rendering pipeline.
 ///
@@ -71,8 +68,8 @@ pub struct GeometryShader<'a, V, U: 'a, K, P> where P: Pixel {
 /// the shader program isn't run at all, since it wouldn't be visible anyway. Additionally,
 /// if the geometry is nearer than an existing fragment, the existing fragment is overwritten.
 ///
-/// Uniforms passed from the vertex shader are interpolating inside the triangles using Barycentric interpolation,
-/// which is why it must satisfy the [`Barycentric`](../uniform/trait.Barycentric.html) trait, which can be automatically implemented for many types using the
+/// Uniforms passed from the vertex shader are interpolating inside the triangles using Interpolate interpolation,
+/// which is why it must satisfy the [`Interpolate`](../uniform/trait.Interpolate.html) trait, which can be automatically implemented for many types using the
 /// `declare_uniforms!` macro. See the documentation on that for more information on how to use it.
 pub struct FragmentShader<'a, V, U: 'a, K, P, B = ()> where P: Pixel {
     mesh: Arc<Mesh<V>>,
@@ -167,7 +164,7 @@ impl<'a, V, U: 'a, P> VertexShader<'a, V, U, P> where V: Send + Sync,
     ///
     /// See the [`full_example`](https://github.com/novacrazy/rust-softrender/tree/master/full_example) project for this in action.
     pub fn run<S, K>(self, vertex_shader: S) -> GeometryShader<'a, V, U, K, P> where S: Fn(&Vertex<V>, &U) -> ClipVertex<K> + Sync,
-                                                                                     K: Send + Sync + Barycentric {
+                                                                                     K: Send + Sync + Interpolate {
         let VertexShader {
             mesh,
             uniforms,
@@ -192,7 +189,7 @@ impl<'a, V, U: 'a, P> VertexShader<'a, V, U, P> where V: Send + Sync,
     /// This pathway does not do any clipping, so beware of that when rendering. However,
     /// it is the fastest path, so the tradeoff may be acceptable for some use cases.
     pub fn run_to_fragment<S, K, B>(self, vertex_shader: S) -> FragmentShader<'a, V, U, K, P, ()> where S: Fn(&Vertex<V>, &U) -> ClipVertex<K> + Sync,
-                                                                                                        K: Send + Sync + Barycentric {
+                                                                                                        K: Send + Sync + Interpolate {
         let VertexShader {
             mesh,
             uniforms,
@@ -220,7 +217,7 @@ impl<'a, V, U: 'a, P> VertexShader<'a, V, U, P> where V: Send + Sync,
 
 impl<'a, V, U: 'a, K, P> GeometryShader<'a, V, U, K, P> where V: Send + Sync,
                                                               U: Send + Sync,
-                                                              K: Send + Sync + Barycentric,
+                                                              K: Send + Sync + Interpolate,
                                                               P: Pixel {
     pub fn finish(self) -> FragmentShader<'a, V, U, K, P, ()> {
         let viewport = self.framebuffer.viewport();
@@ -239,7 +236,7 @@ impl<'a, V, U: 'a, K, P> GeometryShader<'a, V, U, K, P> where V: Send + Sync,
 
 impl<'a, V, U: 'a, K, P> GeometryShader<'a, V, U, K, P> where V: Send + Sync,
                                                               U: Send + Sync,
-                                                              K: Send + Sync + Barycentric + Clone,
+                                                              K: Send + Sync + Interpolate + Clone,
                                                               P: Pixel {
     pub fn duplicate<'b>(&'b mut self) -> GeometryShader<'b, V, U, K, P> where 'a: 'b {
         /// Duplicate the geometry shader, and copies any processed geometry.
@@ -396,7 +393,7 @@ impl<'a, V, U: 'a, K, P, O> FragmentShader<'a, V, U, K, P, O> where P: Pixel {
 
 impl<'a, V, U: 'a, K, P, B> FragmentShader<'a, V, U, K, P, B> where V: Send + Sync,
                                                                     U: Send + Sync,
-                                                                    K: Send + Sync + Barycentric,
+                                                                    K: Send + Sync + Interpolate,
                                                                     P: Pixel, B: Blend<P> {
     /// Duplicates all references to internal state to return a cloned fragment shader,
     /// which can be used to efficiently render the same geometry with different
@@ -527,9 +524,9 @@ impl<'a, V, U: 'a, K, P, B> FragmentShader<'a, V, U, K, P, B> where V: Send + Sy
                                         let fragment = fragment_shader(&ScreenVertex {
                                             position: position,
                                             // interpolate the uniforms
-                                            uniforms: Barycentric::interpolate(u, &a.uniforms,
-                                                                               v, &b.uniforms,
-                                                                               w, &c.uniforms),
+                                            uniforms: Interpolate::barycentric_interpolate(u, &a.uniforms,
+                                                                                           v, &b.uniforms,
+                                                                                           w, &c.uniforms),
                                         }, &*uniforms);
 
                                         match fragment {

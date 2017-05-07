@@ -1,6 +1,6 @@
 //! Types, traits and macros for uniform variables
 //!
-//! Currently, the `Barycentric` trait is implemented for `f32` and nalgebra
+//! Currently, the `Interpolate` trait is implemented for `f32` and nalgebra
 //! matrices (including vectors), points, translations, rotations, and Quaternions.
 //!
 //! It can be implemented automatically for your uniforms structures by using the [`declare_uniforms!`](../../macro.declare_uniforms.html) macro.
@@ -14,27 +14,38 @@ use std::ops::{Add, Mul};
 /// See [This document](https://classes.soe.ucsc.edu/cmps160/Fall10/resources/barycentricInterpolation.pdf) for more information.
 ///
 /// This trait can be implemented automatically for most uniforms by using the [`declare_uniforms!`](../../macro.declare_uniforms.html) macro,
-/// which for any collection of uniforms for which `Barycentric` is implemented, will delegate `Barycentric::interpolate` to each member.
-pub trait Barycentric {
+/// which for any collection of uniforms for which `Interpolate` is implemented, will delegate `Interpolate::barycentric_interpolate` to each member.
+pub trait Interpolate {
     /// Interpolate the three values with their corresponding barycentric coordinate weight
-    fn interpolate(u: f32, x1: &Self, v: f32, x2: &Self, w: f32, x3: &Self) -> Self;
+    fn barycentric_interpolate(u: f32, x1: &Self, v: f32, x2: &Self, w: f32, x3: &Self) -> Self;
+    /// Simple linear interpolation
+    fn linear_interpolate(t: f32, x1: &Self, x2: &Self) -> Self;
 }
 
 /// Convenience method for interpolating three values with barycentric coordinates.
 #[inline(always)]
-pub fn barycentric_interpolate<T>(u: f32, ux: T, v: f32, vx: T, w: f32, wx: T) -> T
-    where T: Add<Output=T> + Add<f32, Output=T> + Mul<f32, Output=T> {
+pub fn barycentric_interpolate<T>(u: f32, ux: T, v: f32, vx: T, w: f32, wx: T) -> T where T: Add<Output=T> + Mul<f32, Output=T> {
     ux * u + vx * v + wx * w
 }
 
-impl Barycentric for f32 {
+#[inline(always)]
+pub fn linear_interpolate<T>(t: f32, x1: T, x2: T) -> T where T: Add<Output=T>, T: Mul<f32, Output=T> {
+    x1 * (1.0 - t) + x2 * t
+}
+
+impl Interpolate for f32 {
     #[inline(always)]
-    fn interpolate(u: f32, ux: &Self, v: f32, vx: &Self, w: f32, wx: &Self) -> Self {
-        barycentric_interpolate(u, *ux, v, *vx, w, *wx)
+    fn barycentric_interpolate(u: f32, ux: &Self, v: f32, vx: &Self, w: f32, wx: &Self) -> Self {
+        ux * u + vx * v + wx * w
+    }
+
+    #[inline(always)]
+    fn linear_interpolate(t: f32, x1: &Self, x2: &Self) -> Self {
+        (1.0 - t) * x1 + t * x2
     }
 }
 
-/// Declares a structure and implements the [`Barycentric`](render/uniform/trait.Barycentric.html) trait for it by delegating the trait to each member.
+/// Declares a structure and implements the [`Interpolate`](render/uniform/trait.Interpolate.html) trait for it by delegating the trait to each member.
 ///
 /// So, for example, this:
 ///
@@ -59,18 +70,18 @@ impl Barycentric for f32 {
 ///     pub uv: Vector2<f32>,
 /// }
 ///
-/// impl Barycentric for MyUniforms {
+/// impl Interpolate for MyUniforms {
 ///     fn interpolate(u: f32, ux: &Self, v: f32, vx: &Self, w: f32, wx: &Self) -> Self {
 ///         MyUniforms {
-///             position: Barycentric::interpolate(u, &ux.position, v, &vx.position, w, &wx.position),
-///             normal: Barycentric::interpolate(u, &ux.normal, v, &vx.normal, w, &wx.normal),
-///             uv: Barycentric::interpolate(u, &ux.uv, v, &vx.uv, w, &wx.uv),
+///             position: Interpolate::barycentric_interpolate(u, &ux.position, v, &vx.position, w, &wx.position),
+///             normal: Interpolate::barycentric_interpolate(u, &ux.normal, v, &vx.normal, w, &wx.normal),
+///             uv: Interpolate::barycentric_interpolate(u, &ux.uv, v, &vx.uv, w, &wx.uv),
 ///         }
 ///     }
 /// }
 /// ```
 ///
-/// note that the `u` and `v` in the `Barycentric::interpolate` arguments are mostly unrelated to the `uv` normal. They're both Barycentric coordinates,
+/// note that the `u` and `v` in the `Interpolate::barycentric_interpolate` arguments are mostly unrelated to the `uv` normal. They're both Interpolate coordinates,
 /// but for different things.
 ///
 /// For now, the struct itself must be `pub` and all the members must be `pub`, but hopefully that can change in the future.
@@ -87,13 +98,21 @@ macro_rules! declare_uniforms {
             ),*
         }
 
-        impl $crate::render::Barycentric for $name {
+        impl $crate::render::Interpolate for $name {
             fn interpolate(u: f32, ux: &Self, v: f32, vx: &Self, w: f32, wx: &Self) -> Self {
                 $name {
                     $(
-                        $field: $crate::render::Barycentric::interpolate(u, &ux.$field,
-                                                                         v, &vx.$field,
-                                                                         w, &wx.$field)
+                        $field: $crate::render::Interpolate::barycentric_interpolate(u, &ux.$field,
+                                                                                     v, &vx.$field,
+                                                                                     w, &wx.$field)
+                    ),*
+                }
+            }
+
+            fn linear_interpolate(t: f32, x1: &Self, x2: &Self) -> Self {
+                $name {
+                    $(
+                          $field: $crate::render::Interpolate::linear_interpolate(t, &x1.$field, &x2.$field)
                     ),*
                 }
             }
@@ -107,62 +126,88 @@ use nalgebra::dimension::{DimName, U1, U2, U3, U4, U5, U6};
 use nalgebra::allocator::OwnedAllocator;
 use nalgebra::storage::{Storage, OwnedStorage};
 
-impl<D, S> Barycentric for PointBase<f32, D, S> where D: DimName,
+impl<D, S> Interpolate for PointBase<f32, D, S> where D: DimName,
                                                       S: Storage<f32, D, U1>,
-                                                      Matrix<f32, D, U1, S>: Barycentric {
+                                                      Matrix<f32, D, U1, S>: Interpolate {
     #[inline]
-    fn interpolate(u: f32, ux: &Self, v: f32, vx: &Self, w: f32, wx: &Self) -> Self {
+    fn barycentric_interpolate(u: f32, ux: &Self, v: f32, vx: &Self, w: f32, wx: &Self) -> Self {
         PointBase {
-            coords: Barycentric::interpolate(u, &ux.coords,
-                                             v, &vx.coords,
-                                             w, &wx.coords)
+            coords: Interpolate::barycentric_interpolate(u, &ux.coords,
+                                                         v, &vx.coords,
+                                                         w, &wx.coords)
+        }
+    }
+
+    #[inline]
+    fn linear_interpolate(t: f32, x1: &Self, x2: &Self) -> Self {
+        PointBase {
+            coords: Interpolate::linear_interpolate(t, &x1.coords, &x2.coords)
         }
     }
 }
 
-impl<S> Barycentric for QuaternionBase<f32, S> where S: Storage<f32, U4, U1>,
-                                                     Matrix<f32, U4, U1, S>: Barycentric {
+impl<S> Interpolate for QuaternionBase<f32, S> where S: Storage<f32, U4, U1>,
+                                                     Matrix<f32, U4, U1, S>: Interpolate {
     #[inline]
-    fn interpolate(u: f32, ux: &Self, v: f32, vx: &Self, w: f32, wx: &Self) -> Self {
+    fn barycentric_interpolate(u: f32, ux: &Self, v: f32, vx: &Self, w: f32, wx: &Self) -> Self {
         QuaternionBase {
-            coords: Barycentric::interpolate(u, &ux.coords,
-                                             v, &vx.coords,
-                                             w, &wx.coords)
+            coords: Interpolate::barycentric_interpolate(u, &ux.coords,
+                                                         v, &vx.coords,
+                                                         w, &wx.coords)
+        }
+    }
+
+    #[inline]
+    fn linear_interpolate(t: f32, x1: &Self, x2: &Self) -> Self {
+        QuaternionBase {
+            coords: Interpolate::linear_interpolate(t, &x1.coords, &x2.coords)
         }
     }
 }
 
-impl<D: DimName, S> Barycentric for TranslationBase<f32, D, S> where Matrix<f32, D, U1, S>: Barycentric {
+impl<D: DimName, S> Interpolate for TranslationBase<f32, D, S> where Matrix<f32, D, U1, S>: Interpolate {
     #[inline]
-    fn interpolate(u: f32, ux: &Self, v: f32, vx: &Self, w: f32, wx: &Self) -> Self {
+    fn barycentric_interpolate(u: f32, ux: &Self, v: f32, vx: &Self, w: f32, wx: &Self) -> Self {
         TranslationBase {
-            vector: Barycentric::interpolate(u, &ux.vector,
-                                             v, &vx.vector,
-                                             w, &wx.vector)
+            vector: Interpolate::barycentric_interpolate(u, &ux.vector,
+                                                         v, &vx.vector,
+                                                         w, &wx.vector)
+        }
+    }
+
+    #[inline]
+    fn linear_interpolate(t: f32, x1: &Self, x2: &Self) -> Self {
+        TranslationBase {
+            vector: Interpolate::linear_interpolate(t, &x1.vector, &x2.vector)
         }
     }
 }
 
-impl<D: DimName, S> Barycentric for RotationBase<f32, D, S> where S: Storage<f32, D, D>,
-                                                                  Matrix<f32, D, D, S>: Barycentric {
+impl<D: DimName, S> Interpolate for RotationBase<f32, D, S> where S: Storage<f32, D, D>,
+                                                                  Matrix<f32, D, D, S>: Interpolate {
     #[inline]
-    fn interpolate(u: f32, ux: &Self, v: f32, vx: &Self, w: f32, wx: &Self) -> Self {
-        RotationBase::from_matrix_unchecked(Barycentric::interpolate(
+    fn barycentric_interpolate(u: f32, ux: &Self, v: f32, vx: &Self, w: f32, wx: &Self) -> Self {
+        RotationBase::from_matrix_unchecked(Interpolate::barycentric_interpolate(
             u, ux.matrix(),
             v, vx.matrix(),
             w, wx.matrix(),
         ))
+    }
+
+    #[inline]
+    fn linear_interpolate(t: f32, x1: &Self, x2: &Self) -> Self {
+        RotationBase::from_matrix_unchecked(Interpolate::linear_interpolate(t, x1.matrix(), x2.matrix()))
     }
 }
 
 // Format of this was taken from nalgebra/core/construction.rs
 macro_rules! nalgebra_matrix_uniforms {
     ($($R: ty, $C: ty, $($args: ident:($irow: expr,$icol: expr)),*);* $(;)*) => {$(
-        impl<S> Barycentric for Matrix<f32, $R, $C, S>
+        impl<S> Interpolate for Matrix<f32, $R, $C, S>
             where S: OwnedStorage<f32, $R, $C>,
                   S::Alloc: OwnedAllocator<f32, $R, $C, S> {
             #[inline]
-            fn interpolate(u: f32, ux: &Self, v: f32, vx: &Self, w: f32, wx: &Self) -> Self {
+            fn barycentric_interpolate(u: f32, ux: &Self, v: f32, vx: &Self, w: f32, wx: &Self) -> Self {
                 unsafe {
                     let mut res = Self::new_uninitialized();
 
@@ -170,6 +215,22 @@ macro_rules! nalgebra_matrix_uniforms {
                         *res.get_unchecked_mut($irow, $icol) = *ux.get_unchecked($irow, $icol) * u +
                                                                *vx.get_unchecked($irow, $icol) * v +
                                                                *wx.get_unchecked($irow, $icol) * w;
+                    )*
+
+                    res
+                }
+            }
+
+            #[inline]
+            fn linear_interpolate(t: f32, x1: &Self, x2: &Self) -> Self {
+                let u = 1.0 - t;
+
+                unsafe {
+                    let mut res = Self::new_uninitialized();
+
+                    $(
+                        *res.get_unchecked_mut($irow, $icol) = u * x1.get_unchecked($irow, $icol) +
+                                                               t * x2.get_unchecked($irow, $icol);
                     )*
 
                     res
