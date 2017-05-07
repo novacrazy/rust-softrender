@@ -259,17 +259,25 @@ impl<'a, V, U: 'a, K, P> GeometryShader<'a, V, U, K, P> where V: Send + Sync,
             mut created_vertices,
         } = self;
 
-        let mut new_vertices = indexed_vertices.par_chunks_mut(primitive_vertices).filter_map(|primitive| {
-            geometry_shader(primitive, uniforms).and_then(|new_vertices| {
-                // Only accept new primitives of the same length
-                if new_vertices.len() % primitive_vertices == 0 { Some(new_vertices) } else { None }
-            })
-        }).reduce(|| Vec::new(), |mut new_a, mut new_b| {
-            new_a.append(&mut new_b);
-            new_a
-        });
+        let new_vertices_grouped: Vec<Vec<ClipVertex<K>>> = indexed_vertices.par_chunks_mut(primitive_vertices).filter_map(|primitive| {
+            if primitive.len() == primitive_vertices {
+                geometry_shader(primitive, uniforms).and_then(|new_vertices| {
+                    // Only accept new primitives of the same length
+                    if new_vertices.len() % primitive_vertices == 0 { Some(new_vertices) } else { None }
+                })
+            } else { None }
+        }).collect();
 
-        created_vertices.append(&mut new_vertices);
+        // Run through the new vertices really quick and accumulate their total length
+        let total_new_vertices = new_vertices_grouped.iter().fold(0, |len, new_vertices| len + new_vertices.len());
+
+        // Allocate enough memory for them all
+        created_vertices.reserve(total_new_vertices);
+
+        // Append new vertices
+        for mut new_vertices in new_vertices_grouped.into_iter() {
+            created_vertices.append(&mut new_vertices);
+        }
 
         GeometryShader {
             mesh,
