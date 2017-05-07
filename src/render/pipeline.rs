@@ -220,9 +220,9 @@ impl<'a, V, U: 'a, P> VertexShader<'a, V, U, P> where V: Send + Sync,
 
 impl<'a, V, U: 'a, K, P> GeometryShader<'a, V, U, K, P> where V: Send + Sync,
                                                               U: Send + Sync,
-                                                              K: Send + Sync + Barycentric,
+                                                              K: Send + Sync + Barycentric + Clone,
                                                               P: Pixel {
-    pub fn duplicate<'b>(&'b mut self) -> GeometryShader<'b, V, U, K, P> where 'a: 'b, K: Clone {
+    pub fn duplicate<'b>(&'b mut self) -> GeometryShader<'b, V, U, K, P> where 'a: 'b {
         /// Duplicate the geometry shader, and copies any processed geometry.
         ///
         /// Geometry are not synced between duplicated geometry shaders.
@@ -255,12 +255,32 @@ impl<'a, V, U: 'a, K, P> GeometryShader<'a, V, U, K, P> where V: Send + Sync,
             mesh,
             uniforms,
             framebuffer,
-            mut indexed_vertices,
+            indexed_vertices,
             mut created_vertices,
         } = self;
 
-        let new_vertices_grouped: Vec<Vec<ClipVertex<K>>> = indexed_vertices.par_chunks_mut(primitive_vertices).filter_map(|primitive| {
+        if !indexed_vertices.is_empty() {
+            // De-index and clone all primitive vertices so they can be processed individually.
+            // Since we set indexed_vertices to an empty Vec at the end of this, this is only done once.
+            created_vertices.extend(mesh.indices.chunks(primitive_vertices).flat_map(|primitive_indices| {
+                let mut vertices = Vec::with_capacity(primitive_vertices);
+
+                for index in primitive_indices {
+                    vertices.push(indexed_vertices[*index as usize].clone());
+                }
+
+                vertices.into_iter()
+            }));
+        }
+
+        // Just drop it here to free up some memory before we run the geometry shader
+        drop(indexed_vertices);
+
+        // Since created_vertices contains all formerly indexed vertices and any vertices created by previous runs on the geometry shader,
+        // we can use it directly to modify and spawn new primitives.
+        let new_vertices_grouped: Vec<Vec<ClipVertex<K>>> = created_vertices.par_chunks_mut(primitive_vertices).filter_map(|primitive| {
             if primitive.len() == primitive_vertices {
+                // run the geometry shader
                 geometry_shader(primitive, uniforms).and_then(|new_vertices| {
                     // Only accept new primitives of the same length
                     if new_vertices.len() % primitive_vertices == 0 { Some(new_vertices) } else { None }
@@ -283,7 +303,7 @@ impl<'a, V, U: 'a, K, P> GeometryShader<'a, V, U, K, P> where V: Send + Sync,
             mesh,
             uniforms,
             framebuffer,
-            indexed_vertices,
+            indexed_vertices: Vec::new(),
             created_vertices,
         }
     }
