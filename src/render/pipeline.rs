@@ -279,6 +279,9 @@ impl<'a, V, U: 'a, K, P> GeometryShader<'a, V, U, K, P> where V: Send + Sync,
         } = self;
 
         if !indexed_vertices.is_empty() {
+            // Preallocate storage
+            created_vertices.reserve(mesh.indices.len());
+
             // De-index and clone all primitive vertices so they can be processed individually.
             // Since we set indexed_vertices to an empty Vec at the end of this, this is only done once.
             created_vertices.extend(mesh.indices.chunks(primitive_vertices).flat_map(|primitive_indices| {
