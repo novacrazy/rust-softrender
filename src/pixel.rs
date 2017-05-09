@@ -6,7 +6,7 @@ use nalgebra::Vector4;
 use nalgebra::coordinates::XYZW;
 
 /// Trait required to distinguish pixel type for use in the framebuffer and fragment shader
-pub trait Pixel: Debug + Clone + Copy + Send + Sync {
+pub trait Pixel: Debug + Clone + Copy + Send + Sync + 'static {
     /// An empty pixel in which values can be accumulated into
     fn empty() -> Self;
     /// Copy the pixel, but with the given alpha channel value
