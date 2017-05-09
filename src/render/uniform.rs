@@ -99,7 +99,7 @@ macro_rules! declare_uniforms {
         }
 
         impl $crate::render::Interpolate for $name {
-            fn interpolate(u: f32, ux: &Self, v: f32, vx: &Self, w: f32, wx: &Self) -> Self {
+            fn barycentric_interpolate(u: f32, ux: &Self, v: f32, vx: &Self, w: f32, wx: &Self) -> Self {
                 $name {
                     $(
                         $field: $crate::render::Interpolate::barycentric_interpolate(u, &ux.$field,

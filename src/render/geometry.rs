@@ -3,7 +3,7 @@
 use nalgebra::Vector4;
 use nalgebra::core::coordinates::XYZW;
 
-use ::render::Barycentric;
+use ::render::Interpolate;
 
 /// Defines face winding variations. These apply to screen-space vertices,
 /// so imagine the vertices as they are viewed from the final image.
@@ -73,7 +73,7 @@ pub struct ScreenVertex<K> {
     pub uniforms: K,
 }
 
-impl<K> ClipVertex<K> where K: Send + Sync + Barycentric {
+impl<K> ClipVertex<K> where K: Send + Sync {
     /// Creates a new `ClipVertex` from the given clip-space position and uniforms
     #[inline(always)]
     pub fn new(position: Vector4<f32>, uniforms: K) -> ClipVertex<K> {
