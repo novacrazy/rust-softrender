@@ -62,6 +62,24 @@ impl<K> Default for SeparablePrimitiveStorage<K> {
     }
 }
 
+// Internal type for accumulating varying primitives in screen-space
+#[derive(Clone)]
+struct SeparableScreenPrimitiveStorage<K> {
+    points: Vec<ScreenVertex<K>>,
+    lines: Vec<ScreenVertex<K>>,
+    tris: Vec<ScreenVertex<K>>,
+}
+
+impl<K> Default for SeparableScreenPrimitiveStorage<K> {
+    fn default() -> SeparableScreenPrimitiveStorage<K> {
+        SeparableScreenPrimitiveStorage {
+            points: Vec::new(),
+            lines: Vec::new(),
+            tris: Vec::new(),
+        }
+    }
+}
+
 impl<K> SeparablePrimitiveStorage<K> {
     /*
     fn get_primitives(&self, primitive: Primitive) -> &[ClipVertex<K>] {
@@ -243,7 +261,7 @@ pub struct FragmentShader<'a, V, U: 'a, K, P, B = ()> where P: Pixel {
     uniforms: &'a U,
     mesh: PrimitiveMesh<V>,
     indexed_vertices: Arc<Option<Vec<ScreenVertex<K>>>>,
-    generated_primitives: Arc<SeparablePrimitiveStorage<K>>,
+    generated_primitives: Arc<SeparableScreenPrimitiveStorage<K>>,
     cull_faces: Option<FaceWinding>,
     blend: B,
 }
@@ -355,8 +373,8 @@ impl<'a, V, U: 'a, P> VertexShader<'a, V, U, P> where V: Send + Sync,
     ///
     /// This pathway does not do any clipping, so beware of that when rendering. However,
     /// it is the fastest path, so the tradeoff may be acceptable for some use cases.
-    pub fn run_to_fragment<S, K, B>(self, vertex_shader: S) -> FragmentShader<'a, V, U, K, P, ()> where S: Fn(&Vertex<V>, &U) -> ClipVertex<K> + Sync,
-                                                                                                        K: Send + Sync + Interpolate {
+    pub fn run_to_fragment<S, K>(self, vertex_shader: S) -> FragmentShader<'a, V, U, K, P, ()> where S: Fn(&Vertex<V>, &U) -> ClipVertex<K> + Sync,
+                                                                                                     K: Send + Sync + Interpolate {
         let VertexShader {
             mesh,
             uniforms,
@@ -375,7 +393,7 @@ impl<'a, V, U: 'a, P> VertexShader<'a, V, U, P> where V: Send + Sync,
             uniforms: uniforms,
             mesh: mesh,
             indexed_vertices: Arc::new(Some(indexed_vertices)),
-            generated_primitives: Arc::new(SeparablePrimitiveStorage::default()),
+            generated_primitives: Arc::new(SeparableScreenPrimitiveStorage::default()),
             cull_faces: None,
             blend: (),
         }
@@ -389,12 +407,30 @@ impl<'a, V, U: 'a, K, P> GeometryShader<'a, V, U, K, P> where V: Send + Sync,
     pub fn finish(self) -> FragmentShader<'a, V, U, K, P, ()> {
         let viewport = self.framebuffer.viewport();
 
+        let SeparablePrimitiveStorage { points, lines, tris } = self.generated_primitives;
+
+        let normalize_vertex = move |vertex: ClipVertex<K>| { vertex.normalize(viewport) };
+
+        let indexed_vertices = self.indexed_vertices.map(|indexed_vertices| {
+            indexed_vertices.into_par_iter().map(&normalize_vertex)
+        });
+
+        let points = points.into_par_iter().map(&normalize_vertex);
+        let lines = lines.into_par_iter().map(&normalize_vertex);
+        let tris = tris.into_par_iter().map(&normalize_vertex);
+
         FragmentShader {
             framebuffer: self.framebuffer,
             uniforms: self.uniforms,
             mesh: self.mesh,
-            indexed_vertices: Arc::new(unimplemented!()),
-            generated_primitives: Arc::new(unimplemented!()),
+            indexed_vertices: Arc::new(indexed_vertices.map(|mapped_vertices| {
+                mapped_vertices.collect()
+            })),
+            generated_primitives: Arc::new(SeparableScreenPrimitiveStorage {
+                points: points.collect(),
+                lines: lines.collect(),
+                tris: tris.collect(),
+            }),
             cull_faces: None,
             blend: (),
         }
@@ -926,7 +962,7 @@ impl<'a, V, U: 'a, K, P, B> FragmentShader<'a, V, U, K, P, B> where V: Send + Sy
                                     Fragment::Color(c) => {
                                         let fc = unsafe { color.get_unchecked_mut(index) };
 
-                                        *fc = blend.blend_by_depth(z, *fd, c, *fc);
+                                        *fc = blend.blend(c, *fc);
                                         *fd = z;
                                     }
                                     Fragment::Discard => ()
@@ -943,68 +979,116 @@ impl<'a, V, U: 'a, K, P, B> FragmentShader<'a, V, U, K, P, B> where V: Send + Sy
                 index += dx;
             }
         };
+
+        let framebuffer = Mutex::new(framebuffer);
+
+        if let Some(ref indexed_vertices) = *indexed_vertices {
+            let num_vertices = mesh.primitive.num_vertices();
+
+            let primitives_per_thread = mesh.indices.len() / (num_vertices * current_num_threads());
+
+            let partial_framebuffers = mesh.indices.par_chunks(num_vertices).with_min_len(primitives_per_thread).fold(
+                || framebuffer.lock().unwrap().empty_clone(), {
+                    let fold_method: Box<Fn(FrameBuffer<P>, &[u32]) -> FrameBuffer<P> + Sync> = match mesh.primitive {
+                        Primitive::Point => Box::new(|mut framebuffer, primitive| {
+                            plot_point(&mut framebuffer, &indexed_vertices[primitive[0] as usize]);
+
+                            framebuffer
+                        }),
+                        Primitive::Line => Box::new(|mut framebuffer, primitive| {
+                            draw_line(&mut framebuffer,
+                                      &indexed_vertices[primitive[0] as usize],
+                                      &indexed_vertices[primitive[1] as usize]);
+
+                            framebuffer
+                        }),
+                        Primitive::Triangle => Box::new(|mut framebuffer, primitive| {
+                            rasterize_triangle(&mut framebuffer,
+                                               &indexed_vertices[primitive[0] as usize],
+                                               &indexed_vertices[primitive[1] as usize],
+                                               &indexed_vertices[primitive[2] as usize],
+                            );
+
+                            framebuffer
+                        })
+                    };
+
+                    move |framebuffer, primitive| { fold_method(framebuffer, primitive) }
+                });
+
+            partial_framebuffers.reduce_with(|mut a, mut b| {
+                b.merge_into(&mut a, &blend);
+                framebuffer.lock().unwrap().cache_empty_clone(b);
+                a
+            }).map(|mut final_framebuffer| {
+                let mut framebuffer = framebuffer.lock().unwrap();
+                // Merge final framebuffer into external framebuffer
+                final_framebuffer.merge_into(&mut *framebuffer, &blend);
+                framebuffer.cache_empty_clone(final_framebuffer)
+            });
+        }
     }
 
     /*
-    pub fn run<S>(self, fragment_shader: S) where S: Fn(&ScreenVertex<K>, &U) -> Fragment<P> + Send + Sync {
-    let framebuffer = Mutex::new(framebuffer);
+        pub fn run<S>(self, fragment_shader: S) where S: Fn(&ScreenVertex<K>, &U) -> Fragment<P> + Send + Sync {
+        let framebuffer = Mutex::new(framebuffer);
 
-    let partial_framebuffers_from_indexed = if let Some(indexed_vertices) = indexed_vertices {
-        let index_queue: SegQueue<&[u32]> = SegQueue::new();
+        let partial_framebuffers_from_indexed = if let Some(indexed_vertices) = indexed_vertices {
+            let index_queue: SegQueue<&[u32]> = SegQueue::new();
 
-        // Use chunks of 1024 triangles, giving a balance between granularity and per-chunk performance.
-        // For example, a mesh with 4 million triangles will have about 4,000 chunks, and a mesh with 16,000 triangles will have
-        // about 16 chunks, so even on small meshes there is a chance for threads to steal the other's work just a little.
-        for chunk in mesh.indices.chunks(3 * 1024) {
-            index_queue.push(chunk);
-        }
+            // Use chunks of 1024 triangles, giving a balance between granularity and per-chunk performance.
+            // For example, a mesh with 4 million triangles will have about 4,000 chunks, and a mesh with 16,000 triangles will have
+            // about 16 chunks, so even on small meshes there is a chance for threads to steal the other's work just a little.
+            for chunk in mesh.indices.chunks(3 * 1024) {
+                index_queue.push(chunk);
+            }
 
-        (0..current_num_threads()).into_par_iter().map(|_| -> FrameBuffer<P> {
-            let mut framebuffer = framebuffer.lock().unwrap().empty_clone();
+            (0..current_num_threads()).into_par_iter().map(|_| -> FrameBuffer<P> {
+                let mut framebuffer = framebuffer.lock().unwrap().empty_clone();
 
-            while let Some(chunk) = index_queue.try_pop() {
-                for triangle in chunk.chunks(3) {
-                    // skip incomplete triangles
-                    if triangle.len() != 3 { continue; }
+                while let Some(chunk) = index_queue.try_pop() {
+                    for triangle in chunk.chunks(3) {
+                        // skip incomplete triangles
+                        if triangle.len() != 3 { continue; }
 
-                    let ref a = indexed_vertices[triangle[0] as usize];
-                    let ref b = indexed_vertices[triangle[1] as usize];
-                    let ref c = indexed_vertices[triangle[2] as usize];
+                        let ref a = indexed_vertices[triangle[0] as usize];
+                        let ref b = indexed_vertices[triangle[1] as usize];
+                        let ref c = indexed_vertices[triangle[2] as usize];
 
-                    rasterize_triangle(&mut framebuffer, a, b, c);
+                        rasterize_triangle(&mut framebuffer, a, b, c);
+                    }
                 }
-            }
 
-            framebuffer
-        })
-    } else {
-        None.into_par_iter()
-    };
+                framebuffer
+            })
+        } else {
+            None.into_par_iter()
+        };
 
-    // Only allow as many new empty framebuffer clones as their are running threads, so one framebuffer per thread.
-    // This has the benefit of running a large of number of triangles sequentially.
-    let triangles_per_thread = mesh.indices.len() / (3 * current_num_threads());
+        // Only allow as many new empty framebuffer clones as their are running threads, so one framebuffer per thread.
+        // This has the benefit of running a large of number of triangles sequentially.
+        let triangles_per_thread = mesh.indices.len() / (3 * current_num_threads());
 
-    let partial_framebuffers_from_created = created_vertices.par_chunks(3).with_min_len(triangles_per_thread).fold(
-        || { framebuffer.lock().unwrap().empty_clone() }, |mut framebuffer, triangle| {
-            if triangle.len() == 3 {
-                rasterize_triangle(&mut framebuffer, &triangle[0], &triangle[1], &triangle[2]);
-            }
+        let partial_framebuffers_from_created = created_vertices.par_chunks(3).with_min_len(triangles_per_thread).fold(
+            || { framebuffer.lock().unwrap().empty_clone() }, |mut framebuffer, triangle| {
+                if triangle.len() == 3 {
+                    rasterize_triangle(&mut framebuffer, &triangle[0], &triangle[1], &triangle[2]);
+                }
 
-            framebuffer
+                framebuffer
+            });
+
+        // Merge incoming partial framebuffers in parallel
+        partial_framebuffers.reduce_with(|mut a, mut b| {
+            b.merge_into(&mut a, &blend);
+            framebuffer.lock().unwrap().cache_empty_clone(b);
+            a
+        }).map(|mut final_framebuffer| {
+            let mut framebuffer = framebuffer.lock().unwrap();
+            // Merge final framebuffer into external framebuffer
+            final_framebuffer.merge_into(&mut *framebuffer, &blend);
+            framebuffer.cache_empty_clone(final_framebuffer)
         });
-
-    // Merge incoming partial framebuffers in parallel
-    partial_framebuffers.reduce_with(|mut a, mut b| {
-        b.merge_into(&mut a, &blend);
-        framebuffer.lock().unwrap().cache_empty_clone(b);
-        a
-    }).map(|mut final_framebuffer| {
-        let mut framebuffer = framebuffer.lock().unwrap();
-        // Merge final framebuffer into external framebuffer
-        final_framebuffer.merge_into(&mut *framebuffer, &blend);
-        framebuffer.cache_empty_clone(final_framebuffer)
-    });
-}
-*/
+    }
+    */
 }
