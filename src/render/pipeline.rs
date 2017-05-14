@@ -152,6 +152,22 @@ impl<'s, K> PrimitiveStorage<'s, K> where K: 's {
     pub fn emit_triangle(&mut self, a: ClipVertex<K>, b: ClipVertex<K>, c: ClipVertex<K>) {
         self.storage.push_triangle(a, b, c)
     }
+
+    pub fn re_emit<'p>(&mut self, primitive: PrimitiveRef<'p, K>) where K: Clone {
+        match primitive {
+            PrimitiveRef::Point(point) => self.emit_point(point.clone()),
+            PrimitiveRef::Line { start, end } => self.emit_line(start.clone(), end.clone()),
+            PrimitiveRef::Triangle { a, b, c } => self.emit_triangle(a.clone(), b.clone(), c.clone()),
+        }
+    }
+
+    pub fn re_emit_mut<'p>(&mut self, primitive: PrimitiveMut<'p, K>) where K: Clone {
+        match primitive {
+            PrimitiveMut::Point(point) => self.emit_point(point.clone()),
+            PrimitiveMut::Line { start, end } => self.emit_line(start.clone(), end.clone()),
+            PrimitiveMut::Triangle { a, b, c } => self.emit_triangle(a.clone(), b.clone(), c.clone()),
+        }
+    }
 }
 
 /// Holds references to primitive vertices for each primitive type
@@ -934,9 +950,7 @@ impl<'a, V, U: 'a, K, P, B> FragmentShader<'a, V, U, K, P, B> where V: Send + Sy
                     let y = y as u32;
 
                     if 0.0 <= xf && xf < bb.0 && 0.0 <= yf && yf < bb.1 {
-                        let d1 = (x1 - xf).hypot(y1 - yf);
-
-                        let t = d1 / d;
+                        let t = (x1 - xf).hypot(y1 - yf) / d;
 
                         let position = Interpolate::linear_interpolate(t, &start.position, &end.position);
 
@@ -1066,12 +1080,40 @@ impl<'a, V, U: 'a, K, P, B> FragmentShader<'a, V, U, K, P, B> where V: Send + Sy
 
         let framebuffer = Mutex::new(framebuffer);
 
-        if let Some(ref indexed_vertices) = *indexed_vertices {
+        let points_per_thread = generated_primitives.points.len() / (1 * current_num_threads());
+        let lines_per_thread = generated_primitives.lines.len() / (2 * current_num_threads());
+        let triangles_per_thread = generated_primitives.tris.len() / (3 * current_num_threads());
+
+        let from_points = generated_primitives.points.par_iter().with_min_len(points_per_thread).fold(
+            || framebuffer.lock().unwrap().empty_clone(), |mut framebuffer, point| {
+                plot_point(&mut framebuffer, point);
+
+                framebuffer
+            }
+        );
+
+        let from_lines = generated_primitives.lines.par_chunks(2).with_min_len(lines_per_thread).fold(
+            || framebuffer.lock().unwrap().empty_clone(), |mut framebuffer, line| {
+                draw_line(&mut framebuffer, &line[0], &line[1]);
+
+                framebuffer
+            }
+        );
+
+        let from_tris = generated_primitives.tris.par_chunks(3).with_min_len(triangles_per_thread).fold(
+            || framebuffer.lock().unwrap().empty_clone(), |mut framebuffer, triangle| {
+                rasterize_triangle(&mut framebuffer, &triangle[0], &triangle[1], &triangle[2]);
+
+                framebuffer
+            }
+        );
+
+        let final_framebuffer = if let Some(ref indexed_vertices) = *indexed_vertices {
             let num_vertices = mesh.primitive.num_vertices();
 
             let primitives_per_thread = mesh.indices.len() / (num_vertices * current_num_threads());
 
-            let partial_framebuffers = mesh.indices.par_chunks(num_vertices).with_min_len(primitives_per_thread).fold(
+            let from_indexed = mesh.indices.par_chunks(num_vertices).with_min_len(primitives_per_thread).fold(
                 || framebuffer.lock().unwrap().empty_clone(), {
                     let fold_method: Box<Fn(FrameBuffer<P>, &[u32]) -> FrameBuffer<P> + Sync> = match mesh.primitive {
                         Primitive::Point => Box::new(|mut framebuffer, primitive| {
@@ -1107,17 +1149,25 @@ impl<'a, V, U: 'a, K, P, B> FragmentShader<'a, V, U, K, P, B> where V: Send + Sy
                     move |framebuffer, primitive| { fold_method(framebuffer, primitive) }
                 });
 
-            partial_framebuffers.reduce_with(|mut a, mut b| {
+            from_indexed.chain(from_tris).chain(from_lines).chain(from_points).reduce_with(|mut a, mut b| {
                 b.merge_into(&mut a, &blend);
                 framebuffer.lock().unwrap().cache_empty_clone(b);
                 a
-            }).map(|mut final_framebuffer| {
-                let mut framebuffer = framebuffer.lock().unwrap();
-                // Merge final framebuffer into external framebuffer
-                final_framebuffer.merge_into(&mut *framebuffer, &blend);
-                framebuffer.cache_empty_clone(final_framebuffer)
-            });
-        }
+            })
+        } else {
+            from_tris.chain(from_lines).chain(from_points).reduce_with(|mut a, mut b| {
+                b.merge_into(&mut a, &blend);
+                framebuffer.lock().unwrap().cache_empty_clone(b);
+                a
+            })
+        };
+
+        if let Some(mut final_framebuffer) = final_framebuffer {
+            let mut framebuffer = framebuffer.lock().unwrap();
+            // Merge final framebuffer into external framebuffer
+            final_framebuffer.merge_into(&mut *framebuffer, &blend);
+            framebuffer.cache_empty_clone(final_framebuffer);
+        };
     }
 
     /*
