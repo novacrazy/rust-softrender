@@ -874,17 +874,79 @@ impl<'a, V, U: 'a, K, P, B> FragmentShader<'a, V, U, K, P, B> where V: Send + Sy
         let (width, height) = (framebuffer.width() as usize,
                                framebuffer.height() as usize);
 
-        let bb = (width - 1, height - 1);
+        let bb = ((width - 1) as f32,
+                  (height - 1) as f32);
 
         let plot_point = |framebuffer: &mut FrameBuffer<P>,
                           point: &ScreenVertex<K>| {
-            unimplemented!()
+            let XYZW { x, y, z, .. } = *point.position;
+
+            if 0.0 <= x && x < bb.0 && 0.0 <= y && y < bb.1 && z > 0.0 {
+                let px = x as u32;
+                let py = y as u32;
+
+                let (fc, fd) = unsafe { framebuffer.pixel_depth_mut(px, py) };
+
+                if z < *fd {
+                    match fragment_shader(point, &uniforms) {
+                        Fragment::Color(c) => {
+                            *fc = blend.blend(c, *fc);
+                            *fd = z;
+                        }
+                        Fragment::Discard => ()
+                    };
+                }
+            }
         };
 
         let draw_line = |framebuffer: &mut FrameBuffer<P>,
                          start: &ScreenVertex<K>,
                          end: &ScreenVertex<K>| {
-            unimplemented!()
+            let XYZW { x: x1, y: y1, .. } = *start.position;
+            let XYZW { x: x2, y: y2, .. } = *end.position;
+
+            let d = (x1 - x2).hypot(y1 - y2);
+
+            let plot_fragment = |x, y, alpha: f64| {
+                if x >= 0 && y >= 0 {
+                    let xf = x as f32;
+                    let yf = y as f32;
+
+                    let x = x as u32;
+                    let y = y as u32;
+
+                    if 0.0 <= xf && xf < bb.0 && 0.0 <= yf && yf < bb.1 {
+                        let d1 = (x1 - xf).hypot(y1 - yf);
+
+                        let t = d1 / d;
+
+                        let position = Interpolate::linear_interpolate(t, &start.position, &end.position);
+
+                        let z = position.z;
+
+                        if z > 0.0 {
+                            let (fc, fd) = unsafe { framebuffer.pixel_depth_mut(x, y) };
+
+                            if z < *fd {
+                                let fragment = fragment_shader(&ScreenVertex {
+                                    position,
+                                    uniforms: Interpolate::linear_interpolate(t, &start.uniforms, &end.uniforms)
+                                }, &uniforms);
+
+                                match fragment {
+                                    Fragment::Color(c) => {
+                                        *fc = blend.blend(c.mul_alpha(alpha as f32), *fc);
+                                        *fd = z;
+                                    }
+                                    Fragment::Discard => ()
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            ::render::line::draw_line_xiaolin_wu(x1 as f64, y1 as f64, x2 as f64, y2 as f64, plot_fragment);
         };
 
         let rasterize_triangle = |framebuffer: &mut FrameBuffer<P>,
@@ -908,12 +970,12 @@ impl<'a, V, U: 'a, K, P, B> FragmentShader<'a, V, U, K, P, B> where V: Send + Sy
             let det = (y2 - y3) * (x1 - x3) + (x3 - x2) * (y1 - y3);
 
             // find x bounds for the bounding box
-            let min_x: usize = clamp(x1.min(x2).min(x3) as usize, 0, bb.0);
-            let max_x: usize = clamp(x1.max(x2).max(x3) as usize, 0, bb.0);
+            let min_x: usize = clamp(x1.min(x2).min(x3), 0.0, bb.0) as usize;
+            let max_x: usize = clamp(x1.max(x2).max(x3), 0.0, bb.0) as usize;
 
             // find y bounds for the bounding box
-            let min_y: usize = clamp(y1.min(y2).min(y3) as usize, 0, bb.1);
-            let max_y: usize = clamp(y1.max(y2).max(y3) as usize, 0, bb.1);
+            let min_y: usize = clamp(y1.min(y2).min(y3), 0.0, bb.1) as usize;
+            let max_y: usize = clamp(y1.max(y2).max(y3), 0.0, bb.1) as usize;
 
             let dx = width - (max_x - min_x + 1);
 
