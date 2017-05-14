@@ -267,6 +267,7 @@ pub struct FragmentShader<'a, V, U: 'a, K, P, B = ()> where P: Pixel {
     generated_primitives: Arc<SeparableScreenPrimitiveStorage<K>>,
     cull_faces: Option<FaceWinding>,
     blend: B,
+    antialiased_lines: bool,
 }
 
 ///////////////////////
@@ -399,6 +400,7 @@ impl<'a, V, U: 'a, P> VertexShader<'a, V, U, P> where V: Send + Sync,
             generated_primitives: Arc::new(SeparableScreenPrimitiveStorage::default()),
             cull_faces: None,
             blend: (),
+            antialiased_lines: false,
         }
     }
 }
@@ -436,6 +438,7 @@ impl<'a, V, U: 'a, K, P> GeometryShader<'a, V, U, K, P> where V: Send + Sync,
             }),
             cull_faces: None,
             blend: (),
+            antialiased_lines: false,
         }
     }
 }
@@ -818,7 +821,23 @@ impl<'a, V, U: 'a, K, P, B> DerefMut for FragmentShader<'a, V, U, K, P, B> where
     fn deref_mut(&mut self) -> &mut B { &mut self.blend }
 }
 
-impl<'a, V, U: 'a, K, P, O> FragmentShader<'a, V, U, K, P, O> where P: Pixel {
+impl<'a, V, U, K, P, B> FragmentShader<'a, V, U, K, P, B> where P: Pixel {
+    /// Cull faces based on winding order. For more information on how and why this works,
+    /// check out the documentation for the [`FaceWinding`](../geometry/enum.FaceWinding.html) enum.
+    #[inline(always)]
+    pub fn cull_faces(&mut self, cull: Option<FaceWinding>) {
+        self.cull_faces = cull;
+    }
+
+    /// Enables drawing antialiased lines for `Line` and `Wireframe`
+    /// primitives using Xiaolin Wu's algorithm
+    #[inline(always)]
+    pub fn antialiased_lines(&mut self, enable: bool) {
+        self.antialiased_lines = enable;
+    }
+}
+
+impl<'a, V, U, K, P, O> FragmentShader<'a, V, U, K, P, O> where P: Pixel {
     pub fn with_blend<B>(self, blend: B) -> FragmentShader<'a, V, U, K, P, B> where B: Blend<P> {
         FragmentShader {
             blend: blend,
@@ -828,6 +847,7 @@ impl<'a, V, U: 'a, K, P, O> FragmentShader<'a, V, U, K, P, O> where P: Pixel {
             indexed_vertices: self.indexed_vertices,
             generated_primitives: self.generated_primitives,
             cull_faces: self.cull_faces,
+            antialiased_lines: self.antialiased_lines,
         }
     }
 
@@ -853,14 +873,8 @@ impl<'a, V, U: 'a, K, P, B> FragmentShader<'a, V, U, K, P, B> where V: Send + Sy
             generated_primitives: self.generated_primitives.clone(),
             cull_faces: self.cull_faces.clone(),
             blend: self.blend.clone(),
+            antialiased_lines: self.antialiased_lines,
         }
-    }
-
-    /// Cull faces based on winding order. For more information on how and why this works,
-    /// check out the documentation for the [`FaceWinding`](../geometry/enum.FaceWinding.html) enum.
-    #[inline(always)]
-    pub fn cull_faces(&mut self, cull: Option<FaceWinding>) {
-        self.cull_faces = cull;
     }
 
     pub fn run<S>(self, fragment_shader: S) where S: Fn(&ScreenVertex<K>, &U) -> Fragment<P> + Send + Sync {
@@ -871,7 +885,8 @@ impl<'a, V, U: 'a, K, P, B> FragmentShader<'a, V, U, K, P, B> where V: Send + Sy
             indexed_vertices,
             generated_primitives,
             cull_faces,
-            blend
+            blend,
+            antialiased_lines
         } = self;
 
         let (width, height) = (framebuffer.width() as usize,
@@ -949,7 +964,11 @@ impl<'a, V, U: 'a, K, P, B> FragmentShader<'a, V, U, K, P, B> where V: Send + Sy
                 }
             };
 
-            ::render::line::draw_line_xiaolin_wu(x1 as f64, y1 as f64, x2 as f64, y2 as f64, plot_fragment);
+            if antialiased_lines {
+                ::render::line::draw_line_xiaolin_wu(x1 as f64, y1 as f64, x2 as f64, y2 as f64, plot_fragment);
+            } else {
+                ::render::line::draw_line_bresenham(x1 as i64, y1 as i64, x2 as i64, y2 as i64, plot_fragment);
+            }
         };
 
         let rasterize_triangle = |framebuffer: &mut FrameBuffer<P>,
