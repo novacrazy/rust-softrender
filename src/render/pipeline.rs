@@ -31,6 +31,9 @@ pub enum Primitive {
     Line,
     /// Triangles between three vertices
     Triangle,
+    /// Exact same as `Triangle`,
+    /// but renders a wireframe instead.
+    Wireframe,
 }
 
 impl Primitive {
@@ -39,7 +42,7 @@ impl Primitive {
         match self {
             Primitive::Point => 1,
             Primitive::Line => 2,
-            Primitive::Triangle => 3,
+            Primitive::Triangle | Primitive::Wireframe => 3,
         }
     }
 }
@@ -517,7 +520,7 @@ impl<'a, V, U: 'a, K, P> GeometryShader<'a, V, U, K, P> where V: Send + Sync,
                                                 uniforms);
                                 storage
                             }),
-                            Primitive::Triangle => Box::new(|mut storage, primitive| {
+                            Primitive::Triangle | Primitive::Wireframe => Box::new(|mut storage, primitive| {
                                 geometry_shader(PrimitiveStorage { storage: &mut storage },
                                                 PrimitiveRef::Triangle {
                                                     a: &indexed_vertices[primitive[0] as usize],
@@ -643,7 +646,7 @@ impl<'a, V, U: 'a, K, P> GeometryShader<'a, V, U, K, P> where V: Send + Sync,
 
                                 storage
                             }),
-                            Primitive::Triangle => Box::new(|mut storage, primitive| {
+                            Primitive::Triangle | Primitive::Wireframe => Box::new(|mut storage, primitive| {
                                 let mut a = indexed_vertices[primitive[0] as usize].clone();
                                 let mut b = indexed_vertices[primitive[1] as usize].clone();
                                 let mut c = indexed_vertices[primitive[2] as usize].clone();
@@ -749,7 +752,7 @@ impl<'a, V, U: 'a, K, P> GeometryShader<'a, V, U, K, P> where V: Send + Sync,
                                                 uniforms);
                                 storage
                             }),
-                            Primitive::Triangle => Box::new(|mut storage, primitive| {
+                            Primitive::Triangle | Primitive::Wireframe => Box::new(|mut storage, primitive| {
                                 geometry_shader(PrimitiveStorage { storage: &mut storage },
                                                 PrimitiveRef::Triangle {
                                                     a: &indexed_vertices[primitive[0] as usize],
@@ -1072,7 +1075,14 @@ impl<'a, V, U: 'a, K, P, B> FragmentShader<'a, V, U, K, P, B> where V: Send + Sy
                             );
 
                             framebuffer
-                        })
+                        }),
+                        Primitive::Wireframe => Box::new(|mut framebuffer, primitive| {
+                            draw_line(&mut framebuffer, &indexed_vertices[primitive[0] as usize], &indexed_vertices[primitive[1] as usize]);
+                            draw_line(&mut framebuffer, &indexed_vertices[primitive[1] as usize], &indexed_vertices[primitive[2] as usize]);
+                            draw_line(&mut framebuffer, &indexed_vertices[primitive[2] as usize], &indexed_vertices[primitive[0] as usize]);
+
+                            framebuffer
+                        }),
                     };
 
                     move |framebuffer, primitive| { fold_method(framebuffer, primitive) }
