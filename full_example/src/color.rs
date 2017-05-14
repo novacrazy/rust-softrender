@@ -3,14 +3,16 @@ use softrender::pixel::RGBAf32Pixel;
 pub type Color = RGBAf32Pixel;
 
 pub fn blend(a: Color, b: Color) -> Color {
-    let sa = a.a;
-    let da = 1.0 - sa;
+    fn over_component(x: f32, y: f32, a: f32, b: f32) -> f32 {
+        let a1 = 1.0 - a;
+        (x * a + y * b * a1) / (a + b * a1)
+    }
 
     Color {
-        r: a.r * sa + b.r * da,
-        g: a.g * sa + b.g * da,
-        b: a.b * sa + b.b * da,
-        a: a.a * sa + b.a * da,
+        r: over_component(a.r, b.r, a.a, b.a),
+        g: over_component(a.g, b.g, a.a, b.a),
+        b: over_component(a.b, b.b, a.a, b.a),
+        a: a.a + b.a * (1.0 - a.a)
     }
 }
 

@@ -56,7 +56,7 @@ pub fn generate_global_uniforms(aspect_ratio: f32,
     GlobalUniforms {
         camera: camera_position.to_homogeneous(),
         model: model,
-        model_inverse_transpose: mit,
+        mit: mit,
         view: view,
         projection: projection,
         // Create a few lights with varying colors, intensities and locations

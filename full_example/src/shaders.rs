@@ -1,22 +1,26 @@
 use softrender::mesh::Vertex;
-use softrender::render::{ScreenVertex, ClipVertex, Fragment};
+use softrender::render::{ScreenVertex, ClipVertex, Fragment, PrimitiveStorage, PrimitiveRef, Interpolate};
 
 use ::color::{Color, SRGB_GAMMA, decode_gamma, encode_gamma, aces_filmic_tonemap};
 use ::mesh::VertexData;
 use ::uniforms::{GlobalUniforms, Uniforms};
 
 pub fn vertex_shader(vertex: &Vertex<VertexData>, global_uniforms: &GlobalUniforms) -> ClipVertex<Uniforms> {
-    let GlobalUniforms { ref view, ref projection, ref model, ref model_inverse_transpose, .. } = *global_uniforms;
+    let GlobalUniforms { ref view, ref projection, ref model, ref mit, .. } = *global_uniforms;
     let VertexData { normal, uv } = vertex.vertex_data;
 
+    let position = vertex.position.to_homogeneous();
+
     // Transform vertex position to world-space
-    let world_position = model * vertex.position.to_homogeneous();
+    let world_position = model * position;
 
     // Transform normal to world-space
-    let normal = (model_inverse_transpose * normal.to_homogeneous()).normalize();
+    let normal = (mit * normal.to_homogeneous()).normalize();
+
+    let mvp = projection * view * model;
 
     // Transform vertex position to clip-space (projection-space)
-    let clip_position = projection * view * world_position;
+    let clip_position = mvp * position;
 
     // Return the clip-space position and any uniforms to interpolate and pass into the fragment shader
     ClipVertex::new(clip_position, Uniforms {
@@ -24,6 +28,64 @@ pub fn vertex_shader(vertex: &Vertex<VertexData>, global_uniforms: &GlobalUnifor
         normal: normal,
         uv: uv,
     })
+}
+
+pub const NORMAL_LENGTH: f32 = 0.05;
+
+pub fn geometry_shader_visualize_vertex_normals<'p, 's>(mut storage: PrimitiveStorage<'p, Uniforms>,
+                                                        primitive: PrimitiveRef<'s, Uniforms>,
+                                                        global_uniforms: &GlobalUniforms) {
+    match primitive {
+        PrimitiveRef::Triangle { a, b, c } => {
+            let GlobalUniforms { ref model, ref view, ref projection, .. } = *global_uniforms;
+
+            let mv = projection * view;
+
+            for v in &[a, b, c] {
+                let Uniforms { ref position, ref normal, .. } = v.uniforms;
+
+                let start = mv * position;
+                let end = mv * (position + normal * NORMAL_LENGTH);
+
+                storage.emit_line(ClipVertex {
+                    position: start,
+                    uniforms: v.uniforms.clone(),
+                }, ClipVertex {
+                    position: end,
+                    uniforms: v.uniforms.clone(),
+                })
+            }
+        }
+        _ => storage.re_emit(primitive)
+    }
+}
+
+pub fn geometry_shader_visualize_face_normals<'p, 's>(mut storage: PrimitiveStorage<'p, Uniforms>,
+                                                      primitive: PrimitiveRef<'s, Uniforms>,
+                                                      global_uniforms: &GlobalUniforms) {
+    match primitive {
+        PrimitiveRef::Triangle { a, b, c } => {
+            let GlobalUniforms { ref model, ref view, ref projection, .. } = *global_uniforms;
+
+            let mv = projection * view;
+
+            const ONE_THIRD: f32 = 1.0 / 3.0;
+
+            let center = Interpolate::barycentric_interpolate(ONE_THIRD, &a.uniforms, ONE_THIRD, &b.uniforms, ONE_THIRD, &c.uniforms);
+
+            let start = mv * center.position;
+            let end = mv * (center.position + center.normal.normalize() * NORMAL_LENGTH);
+
+            storage.emit_line(ClipVertex {
+                position: start,
+                uniforms: center.clone(),
+            }, ClipVertex {
+                position: end,
+                uniforms: center.clone(),
+            });
+        }
+        _ => storage.re_emit(primitive)
+    }
 }
 
 // Simple Fresnel Schlick approximation
@@ -37,9 +99,15 @@ fn saturate(value: f32) -> f32 {
     if value < 0.0 { 0.0 } else if value > 1.0 { 1.0 } else { value }
 }
 
+pub fn fragment_shader_green(_: &ScreenVertex<Uniforms>, _: &GlobalUniforms) -> Fragment<Color> {
+    Fragment::Color(Color { r: 0.0, g: 1.0, b: 0.0, a: 1.0 })
+}
+
 // GLSL habits die hard
 #[allow(non_snake_case)]
 pub fn fragment_shader(vertex: &ScreenVertex<Uniforms>, global_uniforms: &GlobalUniforms) -> Fragment<Color> {
+    //return Fragment::Color(Color { r: 1.0, g: 1.0, b: 1.0, a: 1.0 });
+
     let GlobalUniforms { ref camera, ref lights, .. } = *global_uniforms;
     let Uniforms { position, normal, .. } = vertex.uniforms;
 

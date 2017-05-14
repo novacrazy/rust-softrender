@@ -2,6 +2,7 @@ use nalgebra::Point3;
 
 use ::color::Color;
 
+#[derive(Debug, Clone, Copy)]
 pub struct Light {
     pub color: Color,
     pub position: Point3<f32>,
