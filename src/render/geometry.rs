@@ -103,8 +103,8 @@ impl<K> ClipVertex<K> where K: Send + Sync {
                 let XYZW { x, y, z, w } = *self.position;
 
                 Vector4::new(
-                    (x / w + 1.0) * (width / 2.0),
-                    (1.0 - y / w) * (height / 2.0),
+                    (1.0 + x / w) * width / 2.0,
+                    (1.0 - y / w) * height / 2.0,
                     z / w,
                     1.0 / w
                 )
