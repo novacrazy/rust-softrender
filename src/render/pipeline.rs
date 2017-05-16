@@ -186,7 +186,7 @@ pub struct FragmentShader<'a, T, V, U: 'a, K, P, B = ()> where P: Pixel, T: Prim
     tile_size: (u32, u32),
 }
 
-pub const DEFAULT_TILE_SIZE: (f32, f32) = (256, 256);
+pub const DEFAULT_TILE_SIZE: (u32, u32) = (256, 256);
 
 ///////////////////////
 
