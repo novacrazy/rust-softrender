@@ -54,7 +54,6 @@
 
 extern crate nalgebra;
 extern crate rayon;
-extern crate crossbeam;
 
 #[cfg(feature = "image_compat")]
 extern crate image;
