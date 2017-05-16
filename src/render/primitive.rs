@@ -10,6 +10,11 @@ pub trait Primitive {
     /// This is used internally.
     fn create_ref_from_vertices<'p, K>(vertices: &'p [ClipVertex<K>]) -> PrimitiveRef<'p, K>;
 
+    /// Creates a 'PrimitiveMut` from some vertices
+    ///
+    /// This is used internally.
+    fn create_mut_from_vertices<'p, K>(vertices: &'p mut [ClipVertex<K>]) -> PrimitiveMut<'p, K>;
+
     /// Creates a `PrimitiveRef` from some indexed vertices.
     ///
     /// This are used internally.
@@ -28,6 +33,21 @@ pub enum PrimitiveRef<'p, K: 'p> {
         a: &'p ClipVertex<K>,
         b: &'p ClipVertex<K>,
         c: &'p ClipVertex<K>,
+    }
+}
+
+/// Holds mutable references to primitive vertices for each primitive type
+#[derive(Debug)]
+pub enum PrimitiveMut<'p, K: 'p> {
+    Point(&'p mut ClipVertex<K>),
+    Line {
+        start: &'p mut ClipVertex<K>,
+        end: &'p mut ClipVertex<K>,
+    },
+    Triangle {
+        a: &'p mut ClipVertex<K>,
+        b: &'p mut ClipVertex<K>,
+        c: &'p mut ClipVertex<K>,
     }
 }
 
@@ -52,6 +72,12 @@ impl Primitive for Point {
         PrimitiveRef::Point(&vertices[0])
     }
 
+    fn create_mut_from_vertices<'p, K>(vertices: &'p mut [ClipVertex<K>]) -> PrimitiveMut<'p, K> {
+        assert_eq!(vertices.len(), Self::num_vertices());
+
+        PrimitiveMut::Point(&mut vertices[0])
+    }
+
     fn create_ref_from_indexed_vertices<'p, K>(vertices: &'p [ClipVertex<K>], indices: &[u32]) -> PrimitiveRef<'p, K> {
         assert_eq!(indices.len(), Self::num_vertices());
 
@@ -66,6 +92,14 @@ impl Primitive for Line {
         assert_eq!(vertices.len(), Self::num_vertices());
 
         PrimitiveRef::Line { start: &vertices[0], end: &vertices[1] }
+    }
+
+    fn create_mut_from_vertices<'p, K>(vertices: &'p mut [ClipVertex<K>]) -> PrimitiveMut<'p, K> {
+        assert_eq!(vertices.len(), Self::num_vertices());
+
+        let (mut start, mut end) = vertices.split_at_mut(1);
+
+        PrimitiveMut::Line { start: &mut start[0], end: &mut end[0] }
     }
 
     fn create_ref_from_indexed_vertices<'p, K>(vertices: &'p [ClipVertex<K>], indices: &[u32]) -> PrimitiveRef<'p, K> {
@@ -89,6 +123,15 @@ impl Primitive for Triangle {
             b: &vertices[1],
             c: &vertices[2],
         }
+    }
+
+    fn create_mut_from_vertices<'p, K>(vertices: &'p mut [ClipVertex<K>]) -> PrimitiveMut<'p, K> {
+        assert_eq!(vertices.len(), Self::num_vertices());
+
+        let (mut a, mut bc) = vertices.split_at_mut(1);
+        let (mut b, mut c) = bc.split_at_mut(1);
+
+        PrimitiveMut::Triangle { a: &mut a[0], b: &mut b[0], c: &mut c[0] }
     }
 
     fn create_ref_from_indexed_vertices<'p, K>(vertices: &'p [ClipVertex<K>], indices: &[u32]) -> PrimitiveRef<'p, K> {
