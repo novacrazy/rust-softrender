@@ -13,10 +13,10 @@ use ::utils::clamp;
 use ::pixel::Pixel;
 use ::mesh::{Mesh, Vertex};
 
-use ::render::{FrameBuffer, ClipVertex, ScreenVertex, FaceWinding, Interpolate, Blend};
-use ::render::{Primitive, PrimitiveRef};
-use ::render::primitive::{Point, Line, Triangle};
-use ::render::clip::ALL_CLIPPING_PLANES;
+use ::{FrameBuffer, ClipVertex, ScreenVertex, FaceWinding, Interpolate, Blend};
+use ::{Primitive, PrimitiveRef};
+use ::primitive::{Point, Line, Triangle};
+use ::clip::ALL_CLIPPING_PLANES;
 
 // Internal type for accumulating varying primitives
 #[derive(Clone)]
@@ -204,6 +204,7 @@ impl<U, P> Pipeline<U, P> where U: Send + Sync,
     }
 
     /// Start the shading pipeline for a given mesh
+    #[must_use]
     pub fn render_mesh<T, V>(&mut self, mesh: Arc<Mesh<V>>) -> VertexShader<T, V, U, P> where T: Primitive,
                                                                                               V: Send + Sync {
         VertexShader {
@@ -232,6 +233,7 @@ impl<'a, T, V, U: 'a, P> VertexShader<'a, T, V, U, P> where T: Primitive,
     /// Duplicates all references to internal state to return a cloned vertex shader,
     /// though since the vertex shader itself has very little internal state at this point,
     /// it's not that useful.
+    #[must_use]
     pub fn duplicate<'b>(&'b mut self) -> VertexShader<'b, T, V, U, P> where 'a: 'b {
         VertexShader {
             framebuffer: self.framebuffer,
@@ -274,6 +276,7 @@ impl<'a, T, V, U: 'a, P> VertexShader<'a, T, V, U, P> where T: Primitive,
     /// where `GlobalUniforms`, `VertexData` and `Uniforms` are data structures defined by you.
     ///
     /// See the [`full_example`](https://github.com/novacrazy/rust-softrender/tree/master/full_example) project for this in action.
+    #[must_use]
     pub fn run<S, K>(self, vertex_shader: S) -> GeometryShader<'a, T, V, U, K, P> where S: Fn(&Vertex<V>, &U) -> ClipVertex<K> + Send + Sync,
                                                                                         K: Send + Sync + Interpolate {
         let VertexShader {
@@ -301,16 +304,15 @@ impl<'a, T, V, U: 'a, P> VertexShader<'a, T, V, U, P> where T: Primitive,
     ///
     /// This pathway does not do any clipping, so beware of that when rendering. However,
     /// it is the fastest path, so the tradeoff may be acceptable for some use cases.
-    pub fn run_to_fragment<S, K>(self, vertex_shader: S) -> FragmentShader<'a, T, V, U, K, P, ()> where S: Fn(&Vertex<V>, &U) -> ClipVertex<K> + Sync,
-                                                                                                        K: Send + Sync + Interpolate {
+    #[must_use]
+    pub fn run_to_fragment<S, K>(self, viewport: (f32, f32), vertex_shader: S) -> FragmentShader<'a, T, V, U, K, P, ()> where S: Fn(&Vertex<V>, &U) -> ClipVertex<K> + Sync,
+                                                                                                                              K: Send + Sync + Interpolate {
         let VertexShader {
             framebuffer,
             uniforms,
             mesh,
             ..
         } = self;
-
-        let viewport = framebuffer.viewport();
 
         let indexed_vertices = mesh.vertices.par_iter().map(|vertex| {
             vertex_shader(vertex, uniforms)
@@ -337,6 +339,7 @@ impl<'a, T, V, U: 'a, K, P> GeometryShader<'a, T, V, U, K, P> where T: Primitive
                                                                     U: Send + Sync,
                                                                     K: Send + Sync,
                                                                     P: Pixel {
+    #[must_use]
     pub fn duplicate<'b>(&'b mut self) -> GeometryShader<'b, T, V, U, K, P> where 'a: 'b, K: Clone {
         /// Duplicate the geometry shader, and copies any processed geometry.
         ///
@@ -351,10 +354,9 @@ impl<'a, T, V, U: 'a, K, P> GeometryShader<'a, T, V, U, K, P> where T: Primitive
         }
     }
 
-    pub fn finish(self) -> FragmentShader<'a, T, V, U, K, P, ()> {
+    #[must_use]
+    pub fn finish(self, viewport: (f32, f32)) -> FragmentShader<'a, T, V, U, K, P, ()> {
         let GeometryShader { framebuffer, uniforms, mesh, indexed_primitive, indexed_vertices, generated_primitives } = self;
-
-        let viewport = framebuffer.viewport();
 
         let SeparablePrimitiveStorage { points, lines, tris } = generated_primitives;
 
@@ -390,6 +392,7 @@ impl<'a, T, V, U: 'a, K, P> GeometryShader<'a, T, V, U, K, P> where T: Primitive
         }
     }
 
+    #[must_use]
     pub fn replace<S>(self, geometry_shader: S) -> Self
         where S: for<'s, 'p> Fn(PrimitiveStorage<'s, K>, PrimitiveRef<'p, K>, &U) + Send + Sync + 'static {
         let GeometryShader { uniforms, framebuffer, mesh, indexed_vertices, generated_primitives, .. } = self;
@@ -446,6 +449,7 @@ impl<'a, T, V, U: 'a, K, P> GeometryShader<'a, T, V, U, K, P> where T: Primitive
         }
     }
 
+    #[must_use]
     pub fn clip_primitives(self) -> Self where K: Clone + Interpolate {
         self.replace(|mut storage, primitive, _| {
             match primitive {
@@ -526,6 +530,7 @@ impl<'a, T, V, U, K, P, B> FragmentShader<'a, T, V, U, K, P, B> where T: Primiti
 
 impl<'a, T, V, U, K, P, O> FragmentShader<'a, T, V, U, K, P, O> where T: Primitive,
                                                                       P: Pixel {
+    #[must_use]
     pub fn with_blend<B>(self, blend: B) -> FragmentShader<'a, T, V, U, K, P, B> where B: Blend<P> {
         FragmentShader {
             blend: blend,
@@ -541,6 +546,7 @@ impl<'a, T, V, U, K, P, O> FragmentShader<'a, T, V, U, K, P, O> where T: Primiti
         }
     }
 
+    #[must_use]
     pub fn with_default_blend<B>(self) -> FragmentShader<'a, T, V, U, K, P, B> where B: Blend<P> + Default {
         self.with_blend(B::default())
     }
@@ -554,6 +560,7 @@ impl<'a, T, V, U: 'a, K, P, B> FragmentShader<'a, T, V, U, K, P, B> where T: Pri
     /// Duplicates all references to internal state to return a cloned fragment shader,
     /// which can be used to efficiently render the same geometry with different
     /// rasterization methods in quick succession.
+    #[must_use]
     pub fn duplicate<'b>(&'b mut self) -> FragmentShader<'b, T, V, U, K, P, B> where 'a: 'b,
                                                                                      B: Clone {
         FragmentShader {
@@ -570,23 +577,6 @@ impl<'a, T, V, U: 'a, K, P, B> FragmentShader<'a, T, V, U, K, P, B> where T: Pri
         }
     }
 
-    pub fn run<S>(self, fragment_shader: S) where S: Fn(&ScreenVertex<K>, &U) -> Fragment<P> + Send + Sync {
-        let FragmentShader {
-            mesh,
-            uniforms,
-            framebuffer,
-            indexed_vertices,
-            generated_primitives,
-            cull_faces,
-            blend,
-            antialiased_lines,
-            tile_size,
-            ..
-        } = self;
-
-        let (width, height) = (framebuffer.width() as usize,
-                               framebuffer.height() as usize);
-
-        let bb = (width as f32, height as f32);
-    }
+    #[must_use]
+    pub fn run<S>(self, fragment_shader: S) where S: Fn(&ScreenVertex<K>, &U) -> Fragment<P> + Send + Sync {}
 }
