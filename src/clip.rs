@@ -3,7 +3,7 @@
 use nalgebra::Vector4;
 use nalgebra::coordinates::XYZW;
 
-use ::render::{ClipVertex, Interpolate, PrimitiveStorage, PrimitiveRef};
+use ::{ClipVertex, Interpolate, PrimitiveStorage, PrimitiveRef};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ClippingPlane {

@@ -1,4 +1,4 @@
-use ::render::ClipVertex;
+use ::ClipVertex;
 
 /// Defines the kinds of primitives that can be rendered by themselves.
 pub trait Primitive {
