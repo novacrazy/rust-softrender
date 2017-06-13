@@ -13,6 +13,7 @@ version = "0.1.0"
 [dependencies]
 alga = "0.5.1"
 nalgebra = "0.12"
+num-traits = "0.1.39"
 rayon = "0.7.0"
 
 [dependencies.image]
