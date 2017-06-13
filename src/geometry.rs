@@ -3,8 +3,6 @@
 use nalgebra::Vector4;
 use nalgebra::core::coordinates::XYZW;
 
-use ::Interpolate;
-
 /// Defines face winding variations. These apply to screen-space vertices,
 /// so imagine the vertices as they are viewed from the final image.
 ///
