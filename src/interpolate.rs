@@ -151,8 +151,6 @@ macro_rules! nalgebra_matrix_uniforms {
 
             #[inline]
             fn linear_interpolate(t: f32, x1: &Self, x2: &Self) -> Self {
-                let u = 1.0 - t;
-
                 unsafe {
                     let mut res = Self::new_uninitialized();
 
