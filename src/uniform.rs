@@ -48,7 +48,10 @@
 #[macro_export]
 macro_rules! declare_uniforms {
     ($(#[$($struct_attrs:tt)*])* pub struct $name:ident {
-        $($(#[$($field_attrs:tt)*])* pub $field:ident: $t:ty,)*
+        $(
+            $(#[$($field_attrs:tt)*])*
+            pub $field:ident: $t:ty,
+        )*
     }) => {
         $(#[$($struct_attrs)*])*
         pub struct $name {
