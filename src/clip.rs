@@ -1,9 +1,11 @@
-//! Clipping implementation
+//! Clipping planes
 
 use nalgebra::Vector4;
 use nalgebra::coordinates::XYZW;
 
-use ::{ClipVertex, Interpolate, PrimitiveStorage, PrimitiveRef};
+use ::{ClipVertex, Interpolate};
+
+use ::pipeline::PrimitiveStorage;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ClippingPlane {
@@ -58,9 +60,6 @@ impl ClippingPlane {
 
         let t = a / (a - b);
 
-        ClipVertex {
-            position: Interpolate::linear_interpolate(t, &v1.position, &v2.position),
-            uniforms: Interpolate::linear_interpolate(t, &v1.uniforms, &v2.uniforms),
-        }
+        Interpolate::linear_interpolate(t, &v1, &v2)
     }
 }
