@@ -1,4 +1,16 @@
-/*
+use std::sync::Arc;
+use std::marker::PhantomData;
+use std::ops::Deref;
+
+use ::framebuffer::{Framebuffer, Dimensions};
+use ::primitive::Primitive;
+use ::mesh::Mesh;
+use ::geometry::{ScreenVertex, FaceWinding};
+use ::interpolate::Interpolate;
+use ::pipeline::storage::SeparableScreenPrimitiveStorage;
+
+use ::pipeline::PipelineObject;
+
 /// Fragment shader stage.
 ///
 /// The fragment shader is responsible for determining the color of pixels where the underlying geometry has been projected onto.
@@ -13,21 +25,27 @@
 /// Uniforms passed from the vertex shader are interpolating inside the triangles using Interpolate interpolation,
 /// which is why it must satisfy the [`Interpolate`](../uniform/trait.Interpolate.html) trait, which can be automatically implemented for many types using the
 /// `declare_uniforms!` macro. See the documentation on that for more information on how to use it.
-pub struct FragmentShader<'a, T, V, U: 'a, K, P, B = ()> where P: Pixel, T: Primitive {
-    framebuffer: &'a mut FrameBuffer<P>,
-    uniforms: &'a U,
-    mesh: Arc<Mesh<V>>,
-    indexed_primitive: PhantomData<T>,
-    indexed_vertices: Arc<Option<Vec<ScreenVertex<K>>>>,
-    generated_primitives: Arc<SeparableScreenPrimitiveStorage<K>>,
-    cull_faces: Option<FaceWinding>,
-    blend: B,
-    antialiased_lines: bool,
-    tile_size: (u32, u32),
+pub struct FragmentShader<'a, P: 'a, V, T, K, B> {
+    pub ( in ::pipeline) pipeline: &'a mut P,
+    pub ( in ::pipeline) mesh: Arc<Mesh<V>>,
+    pub ( in ::pipeline) indexed_primitive: PhantomData<T>,
+    pub ( in ::pipeline) indexed_vertices: Arc<Option<Vec<ScreenVertex<K>>>>,
+    pub ( in ::pipeline) generated_primitives: Arc<SeparableScreenPrimitiveStorage<K>>,
+    pub ( in ::pipeline) cull_faces: Option<FaceWinding>,
+    pub ( in ::pipeline) blend: B,
+    pub ( in ::pipeline) antialiased_lines: bool,
+    pub ( in ::pipeline) tile_size: Dimensions,
 }
 
-pub const DEFAULT_TILE_SIZE: (u32, u32) = (256, 256);
+pub const DEFAULT_TILE_SIZE: Dimensions = Dimensions { width: 16, height: 16 };
 
+impl<'a, P: 'a, V, T, K, B> Deref for FragmentShader<'a, P, V, T, K, B> {
+    type Target = P;
+
+    fn deref(&self) -> &P { &*self.pipeline }
+}
+
+/*
 
 /// Fragment returned by the fragment shader, which can either be a color
 /// value for the pixel or a discard flag to skip that fragment altogether.
