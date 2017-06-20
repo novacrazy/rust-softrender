@@ -3,6 +3,8 @@
 use nalgebra::Vector4;
 use nalgebra::core::coordinates::XYZW;
 
+use ::interpolate::Interpolate;
+
 /// Defines face winding variations. These apply to screen-space vertices,
 /// so imagine the vertices as they are viewed from the final image.
 ///
@@ -56,6 +58,24 @@ pub struct ClipVertex<K> {
     pub uniforms: K,
 }
 
+impl<K> Interpolate for ClipVertex<K> where K: Interpolate {
+    #[inline]
+    fn barycentric_interpolate(u: f32, x1: &Self, v: f32, x2: &Self, w: f32, x3: &Self) -> Self {
+        ClipVertex {
+            position: Interpolate::barycentric_interpolate(u, &x1.position, v, &x2.position, w, &x3.position),
+            uniforms: Interpolate::barycentric_interpolate(u, &x1.uniforms, v, &x2.uniforms, w, &x3.uniforms),
+        }
+    }
+
+    #[inline]
+    fn linear_interpolate(t: f32, x1: &Self, x2: &Self) -> Self {
+        ClipVertex {
+            position: Interpolate::linear_interpolate(t, &x1.position, &x2.position),
+            uniforms: Interpolate::linear_interpolate(t, &x1.uniforms, &x2.uniforms),
+        }
+    }
+}
+
 /// Defines a vertex and uniforms in screen-space, which is used in the fragment shader.
 ///
 /// Clip-space vertices are transformed to screen-space after the vertex shader
@@ -71,6 +91,24 @@ pub struct ScreenVertex<K> {
     pub uniforms: K,
 }
 
+impl<K> Interpolate for ScreenVertex<K> where K: Interpolate {
+    #[inline]
+    fn barycentric_interpolate(u: f32, x1: &Self, v: f32, x2: &Self, w: f32, x3: &Self) -> Self {
+        ScreenVertex {
+            position: Interpolate::barycentric_interpolate(u, &x1.position, v, &x2.position, w, &x3.position),
+            uniforms: Interpolate::barycentric_interpolate(u, &x1.uniforms, v, &x2.uniforms, w, &x3.uniforms),
+        }
+    }
+
+    #[inline]
+    fn linear_interpolate(t: f32, x1: &Self, x2: &Self) -> Self {
+        ScreenVertex {
+            position: Interpolate::linear_interpolate(t, &x1.position, &x2.position),
+            uniforms: Interpolate::linear_interpolate(t, &x1.uniforms, &x2.uniforms),
+        }
+    }
+}
+
 impl<K> ClipVertex<K> where K: Send + Sync {
     /// Creates a new `ClipVertex` from the given clip-space position and uniforms
     #[inline(always)]
@@ -78,6 +116,8 @@ impl<K> ClipVertex<K> where K: Send + Sync {
         ClipVertex { position: position, uniforms: uniforms }
     }
 
+    /// TODO: Move this to shader stage
+    ///
     /// Normalizes the clip-space vertex coordinates to screen-space using the given viewport.
     ///
     /// This assumes a viewport in the shape of:
