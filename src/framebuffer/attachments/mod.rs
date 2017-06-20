@@ -2,9 +2,9 @@ pub mod color;
 pub mod depth;
 pub mod stencil;
 
-pub trait Attachment: Copy + Default + Send + Sync + 'static {}
+pub trait Attachment: Copy + Send + Sync + 'static {}
 
-impl<T> Attachment for T where T: Copy + Default + Send + Sync + 'static {}
+impl<T> Attachment for T where T: Copy + Send + Sync + 'static {}
 
 pub use self::color::Color;
 pub use self::depth::Depth;
