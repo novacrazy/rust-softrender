@@ -2,7 +2,7 @@ use ::{ClipVertex, ScreenVertex, PrimitiveRef};
 
 // Internal type for accumulating varying primitives
 #[derive(Clone)]
-pub ( crate ) struct SeparablePrimitiveStorage<K> {
+pub ( in ::pipeline ) struct SeparablePrimitiveStorage<K> {
     pub points: Vec<ClipVertex<K>>,
     pub lines: Vec<ClipVertex<K>>,
     pub tris: Vec<ClipVertex<K>>,
@@ -20,7 +20,7 @@ impl<K> Default for SeparablePrimitiveStorage<K> {
 
 // Internal type for accumulating varying primitives in screen-space
 #[derive(Clone)]
-pub ( crate ) struct SeparableScreenPrimitiveStorage<K> {
+pub ( in ::pipeline ) struct SeparableScreenPrimitiveStorage<K> {
     pub points: Vec<ScreenVertex<K>>,
     pub lines: Vec<ScreenVertex<K>>,
     pub tris: Vec<ScreenVertex<K>>,
@@ -66,7 +66,7 @@ impl<K> SeparablePrimitiveStorage<K> {
 
 /// Holds a reference to the internal storage structure for primitives
 pub struct PrimitiveStorage<'s, K> where K: 's {
-    inner: &'s mut SeparablePrimitiveStorage<K>,
+    pub ( in ::pipeline ) inner: &'s mut SeparablePrimitiveStorage<K>,
 }
 
 impl<'s, K> PrimitiveStorage<'s, K> where K: 's {
@@ -88,7 +88,8 @@ impl<'s, K> PrimitiveStorage<'s, K> where K: 's {
         self.inner.push_triangle(a, b, c)
     }
 
-    pub fn re_emit<'p>(&mut self, primitive: PrimitiveRef<'p, K>) where K: Clone {
+    #[inline]
+    pub fn emit<'p>(&mut self, primitive: PrimitiveRef<'p, K>) where K: Clone {
         match primitive {
             PrimitiveRef::Point(point) => self.emit_point(point.clone()),
             PrimitiveRef::Line { start, end } => self.emit_line(start.clone(), end.clone()),
