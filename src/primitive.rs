@@ -52,15 +52,15 @@ pub enum PrimitiveMut<'p, K: 'p> {
 }
 
 /// Individual points
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct Point;
 
 /// Lines between two vertices
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct Line;
 
 /// Triangles between three vertices
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct Triangle;
 
 impl Primitive for Point {
