@@ -70,8 +70,12 @@ impl<U, F> Pipeline<U, F> where U: Send + Sync, F: Framebuffer {
 impl<U, F> Pipeline<U, F> where Self: PipelineObject {
     /// Start the shading pipeline for a given mesh
     #[must_use]
-    pub fn render_mesh<T, V>(&mut self, mesh: Arc<Mesh<V>>) -> VertexShader<Self, V, T> where T: Primitive,
-                                                                                              V: Send + Sync {
+    pub fn render_mesh<T, V>(&mut self, primitive: T, mesh: Arc<Mesh<V>>) -> VertexShader<Self, V, T> where T: Primitive,
+                                                                                                            V: Send + Sync {
+        // We only needed the type information,
+        // so just throw away the empty object passed in
+        drop(primitive);
+
         VertexShader { pipeline: self, mesh, indexed_primitive: PhantomData }
     }
 }
