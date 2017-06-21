@@ -1,8 +1,11 @@
+//! Defines color blending trait and standard blend function handling
+
 use std::sync::Arc;
 use std::marker::PhantomData;
 
 use super::Color;
 
+/// Defines some kind of color blending function
 pub trait Blend<C: Color>: Send + Sync {
     /// The first parameter passed to the blend function is the output of the fragment shader, the source color.
     ///

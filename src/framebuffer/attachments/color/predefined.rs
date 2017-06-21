@@ -1,3 +1,5 @@
+//! Defines standard one to four channel colors of both `f32` and `u8` types.
+
 use num_traits::{Num, Zero};
 
 use nalgebra::{Vector1, Vector2, Vector3, Vector4, Scalar};
@@ -29,30 +31,29 @@ pub mod formats {
     #[cfg(test)]
     mod test {
         use ::framebuffer::attachments::Color;
+        use ::framebuffer::attachments::color::__assert_color;
 
         use super::*;
 
-        fn assert_color<C: Color>() {}
-
         #[test]
         fn test_f32_color_assert() {
-            assert_color::<RGBAf32Color>();
-            assert_color::<RGBf32Color>();
-            assert_color::<RGf32Color>();
-            assert_color::<Rf32Color>();
+            __assert_color::<RGBAf32Color>();
+            __assert_color::<RGBf32Color>();
+            __assert_color::<RGf32Color>();
+            __assert_color::<Rf32Color>();
         }
 
         #[test]
         fn test_u8_color_assert() {
-            assert_color::<RGBAu8Color>();
-            assert_color::<RGBu8Color>();
-            assert_color::<RGu8Color>();
-            assert_color::<Ru8Color>();
+            __assert_color::<RGBAu8Color>();
+            __assert_color::<RGBu8Color>();
+            __assert_color::<RGu8Color>();
+            __assert_color::<Ru8Color>();
         }
     }
 }
 
-impl<T> Color for Vector4<T> where T: Scalar + Num + Send + Sync {
+impl<T> Color for Vector4<T> where T: Scalar + Num + Send + Sync + Default {
     type Alpha = T;
 
     #[inline]
@@ -78,7 +79,7 @@ impl<T> Color for Vector4<T> where T: Scalar + Num + Send + Sync {
 
 macro_rules! impl_vector_color_without_alpha {
     ($name:ident) => {
-        impl<T> Color for $name<T> where T: Scalar + Num + Send + Sync {
+        impl<T> Color for $name<T> where T: Scalar + Num + Send + Sync + Default {
             type Alpha = ();
 
             #[inline]

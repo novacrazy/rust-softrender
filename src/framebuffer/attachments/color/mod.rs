@@ -4,7 +4,7 @@ pub mod blend;
 
 /// Defines a Color buffer attachment
 pub trait Color: super::Attachment {
-    type Alpha: super::Attachment;
+    type Alpha: super::Attachment + Default;
 
     /// An empty pixel in which values can be accumulated into
     fn empty() -> Self;
@@ -26,3 +26,6 @@ impl Color for () {
 }
 
 pub mod predefined;
+
+#[doc(hidden)]
+pub fn __assert_color<C: Color>() {}

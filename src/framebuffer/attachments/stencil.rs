@@ -5,9 +5,9 @@ use num_traits::{PrimInt, WrappingSub, WrappingAdd};
 /// Defines a type that can be used in a stencil buffer.
 ///
 /// This is automatically implemented for any type that implements its dependenct traits
-pub trait StencilType: super::Attachment + PrimInt + WrappingSub + WrappingAdd {}
+pub trait StencilType: super::Attachment + PrimInt + WrappingSub + WrappingAdd + Default {}
 
-impl<T> StencilType for T where T: super::Attachment + PrimInt + WrappingSub + WrappingAdd {}
+impl<T> StencilType for T where T: super::Attachment + PrimInt + WrappingSub + WrappingAdd + Default {}
 
 /// Defines tests which can be performed on stencil buffers
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
@@ -92,9 +92,9 @@ pub trait StencilConfig<T> {
 /// Defines a stencil buffer attachment
 pub trait Stencil: super::Attachment {
     /// The inner data type of the stencil buffer
-    type Type;
+    type Type: super::Attachment + Default;
     /// The configuration type for the stencil buffer. This has only one instance per attachment.
-    type Config: StencilConfig<Self::Type>;
+    type Config: StencilConfig<Self::Type> + Default;
 }
 
 impl StencilConfig<()> for () {
@@ -123,6 +123,15 @@ impl<T> StencilConfig<T> for GenericStencilConfig<T> where T: StencilType {
 
     #[inline(always)]
     fn test(&self) -> StencilTest { self.test }
+}
+
+impl<T> Default for GenericStencilConfig<T> {
+    fn default() -> GenericStencilConfig<T> {
+        GenericStencilConfig {
+            op: StencilOp::Keep,
+            test: StencilTest::Always,
+        }
+    }
 }
 
 /// Generic stencil buffer attachment for any `StencilType`
