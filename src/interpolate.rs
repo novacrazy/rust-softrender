@@ -27,6 +27,14 @@ pub fn linear_interpolate<T>(t: f32, x1: T, x2: T) -> T where T: Add<Output=T>, 
     x1 * (1.0 - t) + x2 * t
 }
 
+impl Interpolate for () {
+    #[inline(always)]
+    fn barycentric_interpolate(_: f32, _: &Self, _: f32, _: &Self, _: f32, _: &Self) -> Self { () }
+
+    #[inline(always)]
+    fn linear_interpolate(_: f32, _: &Self, _: &Self) -> Self { () }
+}
+
 impl Interpolate for f32 {
     #[inline(always)]
     fn barycentric_interpolate(u: f32, ux: &Self, v: f32, vx: &Self, w: f32, wx: &Self) -> Self {
