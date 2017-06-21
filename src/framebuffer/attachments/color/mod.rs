@@ -4,18 +4,25 @@ pub mod blend;
 
 /// Defines a Color buffer attachment
 pub trait Color: super::Attachment {
+    type Alpha: super::Attachment;
+
     /// An empty pixel in which values can be accumulated into
     fn empty() -> Self;
     /// Copy the pixel, but with the given alpha channel value
-    fn with_alpha(self, alpha: f32) -> Self;
+    fn with_alpha(self, alpha: Self::Alpha) -> Self;
     /// Copy the pixel, but multiply the alpha channel with the given value
-    fn mul_alpha(self, alpha: f32) -> Self;
+    fn mul_alpha(self, alpha: Self::Alpha) -> Self;
+    /// Get the alpha of the color
+    fn get_alpha(&self) -> Self::Alpha;
 }
 
 impl Color for () {
+    type Alpha = ();
+
     fn empty() -> () { () }
-    fn with_alpha(self, _: f32) -> () { () }
-    fn mul_alpha(self, _: f32) -> () { () }
+    fn with_alpha(self, _: Self::Alpha) -> () { () }
+    fn mul_alpha(self, _: Self::Alpha) -> () { () }
+    fn get_alpha(&self) -> Self::Alpha { () }
 }
 
 pub mod predefined;
