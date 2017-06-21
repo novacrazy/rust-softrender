@@ -5,6 +5,11 @@ use num_traits::Bounded;
 /// Defines a depth buffer attachment.
 ///
 /// This is automatically implemented for type that satisfy the dependent traits
-pub trait Depth: super::Attachment + Bounded + PartialOrd + Default {}
+pub trait Depth: super::Attachment + Bounded + PartialOrd + Default {
+    fn far() -> Self;
+}
 
-impl<T> Depth for T where T: super::Attachment + Bounded + PartialOrd + Default {}
+impl<T> Depth for T where T: super::Attachment + Bounded + PartialOrd + Default {
+    #[inline]
+    fn far() -> T { <T as Bounded>::min_value() }
+}
