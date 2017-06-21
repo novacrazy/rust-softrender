@@ -7,17 +7,23 @@ macro_rules! tuple_impls {
         }
     )+) => {
         $(
-            impl<$($T),+> $crate::Pixel for ($($T,)+) where $($T: $crate::Pixel,)+ {
+            impl<$($T),+> $crate::attachments::Color for ($($T,)+) where $($T: $crate::attachments::Color,)+ {
+                type Alpha = ($(<$T as $crate::attachments::Color>::Alpha,)+);
+
                 fn empty() -> Self {
-                    ($(<$T as $crate::Pixel>::empty(),)+)
+                    ($(<$T as $crate::attachments::Color>::empty(),)+)
                 }
 
-                fn with_alpha(self, alpha: f32) -> Self {
-                    ($(<$T as $crate::Pixel>::with_alpha(self.$idx, alpha),)+)
+                fn with_alpha(self, alpha: Self::Alpha) -> Self {
+                    ($(<$T as $crate::attachments::Color>::with_alpha(self.$idx, alpha.$idx),)+)
                 }
 
-                fn mul_alpha(self, alpha: f32) -> Self {
-                    ($(<$T as $crate::Pixel>::mul_alpha(self.$idx, alpha),)+)
+                fn mul_alpha(self, alpha: Self::Alpha) -> Self {
+                    ($(<$T as $crate::attachments::Color>::mul_alpha(self.$idx, alpha.$idx),)+)
+                }
+
+                fn get_alpha(&self) -> Self::Alpha {
+                    ($(<$T as $crate::attachments::Color>::get_alpha(&self.$idx),)+)
                 }
             }
 

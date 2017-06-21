@@ -68,13 +68,16 @@ pub mod interpolate;
 pub mod uniform;
 pub mod clip;
 pub mod pipeline;
+pub mod tuples;
 
 //#[cfg(feature = "image_compat")]
 //pub mod image_compat;
 
 pub use mesh::{Vertex, Mesh};
 pub use geometry::{FaceWinding, ClipVertex, ScreenVertex};
-//pub use framebuffer::FrameBuffer;
-pub use interpolate::{Interpolate, barycentric_interpolate, linear_interpolate};
+pub use framebuffer::{attachments, Framebuffer};
+pub use interpolate::Interpolate;
 pub use primitive::{Primitive, PrimitiveRef, PrimitiveMut};
-//pub use pipeline::{Pipeline, VertexShader, FragmentShader, Fragment, PrimitiveStorage};
+pub use pipeline::{Pipeline, PipelineObject,
+                   VertexShader, GeometryShader, FragmentShader,
+                   PrimitiveStorage};
