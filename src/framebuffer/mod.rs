@@ -1,13 +1,21 @@
+use ::error::{RenderError, RenderResult};
+
 pub mod attachments;
 
 pub use self::attachments::Attachments;
 
 use self::attachments::{Depth, Stencil};
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd)]
 pub struct Dimensions {
     pub width: u32,
     pub height: u32,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd)]
+pub struct Coordinate {
+    pub x: u32,
+    pub y: u32,
 }
 
 impl Dimensions {
@@ -22,17 +30,114 @@ impl Dimensions {
     }
 
     #[inline]
-    pub fn valid(&self, x: u32, y: u32) -> bool {
+    pub fn valid(&self, coord: Coordinate) -> bool {
+        let Coordinate { x, y } = coord;
+
         x < self.width && y < self.height
+    }
+
+    #[inline]
+    pub fn check_valid(&self, coord: Coordinate) -> RenderResult<()> {
+        if self.valid(coord) { Ok(()) } else {
+            throw!(RenderError::InvalidPixelCoordinate)
+        }
     }
 }
 
-pub trait Framebuffer: 'static {
-    type Attachments: Attachments;
-    fn dimensions(&self) -> Dimensions;
-    fn clear(&mut self, color: <Self::Attachments as Attachments>::Color);
+impl Coordinate {
+    #[inline]
+    pub fn new(x: u32, y: u32) -> Coordinate {
+        Coordinate { x, y }
+    }
+
+    #[inline]
+    pub fn into_index(self) -> usize {
+        let Coordinate { x, y } = self;
+        x as usize * y as usize
+    }
 }
 
+/// Immutable reference to a pixel.
+///
+/// Provides a read-only accessor for the pixel at the coordinates given at creation.
+pub struct PixelRef<'a, F>(usize, &'a F) where F: Framebuffer;
+
+/// Mutable reference to a pixel
+///
+/// Provides a writable accessor for the pixel at the coordinates given at creation.
+pub struct PixelMut<'a, F>(usize, &'a mut F) where F: Framebuffer;
+
+impl<'a, F> PixelRef<'a, F> where F: Framebuffer {
+    /// Get the pixel
+    #[inline]
+    pub fn get(&self) -> <<F as Framebuffer>::Attachments as Attachments>::Color {
+        unsafe { self.1.get_pixel_unchecked(self.0) }
+    }
+}
+
+impl<'a, F> PixelMut<'a, F> where F: Framebuffer {
+    /// Get the pixel
+    #[inline]
+    pub fn get(&self) -> <<F as Framebuffer>::Attachments as Attachments>::Color {
+        unsafe { self.1.get_pixel_unchecked(self.0) }
+    }
+
+    /// Set the pixel
+    #[inline]
+    pub fn set(&mut self, color: <<F as Framebuffer>::Attachments as Attachments>::Color) {
+        unsafe { self.1.set_pixel_unchecked(self.0, color) }
+    }
+
+    #[inline]
+    pub fn into_ref(self) -> PixelRef<'a, F> {
+        PixelRef(self.0, self.1)
+    }
+}
+
+impl<'a, F> From<PixelMut<'a, F>> for PixelRef<'a, F> where F: Framebuffer {
+    #[inline]
+    fn from(pixel: PixelMut<'a, F>) -> PixelRef<'a, F> { pixel.into_ref() }
+}
+
+pub trait Framebuffer: Sized + 'static {
+    /// Associated type for the framebuffer attachments
+    type Attachments: Attachments;
+
+    /// Returns the dimensions of the framebuffer
+    fn dimensions(&self) -> Dimensions;
+
+    /// Clears the framebuffer with the given color, and sets any depth or stencil buffers back to their default values.
+    fn clear(&mut self, color: <Self::Attachments as Attachments>::Color);
+
+    /// Get pixel value without checking bounds.
+    ///
+    /// WARNING: This might segfault on an invalid index. Please use `pixel_ref`/`pixel_mut` for checked pixel access
+    unsafe fn get_pixel_unchecked(&self, index: usize) -> <Self::Attachments as Attachments>::Color;
+
+    /// Set pixel value without checking bounds.
+    ///
+    /// WARNING: This might segfault on an invalid index. Please use `pixel_ref`/`pixel_mut` for checked pixel access
+    unsafe fn set_pixel_unchecked(&mut self, index: usize, color: <Self::Attachments as Attachments>::Color);
+
+    /// Get a "reference" to the pixel at the given coordinate. Throws `RenderError::InvalidPixelCoordinate` on invalid pixel coordinates.
+    #[inline]
+    fn pixel_ref<'a>(&'a self, coord: Coordinate) -> RenderResult<PixelRef<'a, Self>> {
+        self.dimensions().check_valid(coord).map(|_| {
+            PixelRef(coord.into_index(), self)
+        })
+    }
+
+    /// Get a mutable "reference" to the pixel at the given coordinate. Throws `RenderError::InvalidPixelCoordinate` on invalid pixel coordinates.
+    #[inline]
+    fn pixel_mut<'a>(&'a mut self, coord: Coordinate) -> RenderResult<PixelMut<'a, Self>> {
+        self.dimensions().check_valid(coord).map(move |_| {
+            PixelMut(coord.into_index(), self)
+        })
+    }
+}
+
+/// Renderbuffer framebuffer with interleaved attachments, allowing for more cache locality but
+/// it cannot be re-used later as a texture without copying the attachments out.
 pub struct RenderBuffer<A: Attachments> {
     dimensions: Dimensions,
     stencil: <A::Stencil as Stencil>::Config,
@@ -43,12 +148,23 @@ pub struct RenderBuffer<A: Attachments> {
 impl<A> Framebuffer for RenderBuffer<A> where A: Attachments {
     type Attachments = A;
 
+    #[inline]
     fn dimensions(&self) -> Dimensions { self.dimensions }
 
     fn clear(&mut self, color: <Self::Attachments as Attachments>::Color) {
         for mut a in &mut self.buffer {
             *a = (color, <A::Depth as Depth>::far(), Default::default());
         }
+    }
+
+    #[inline]
+    unsafe fn get_pixel_unchecked(&self, index: usize) -> <Self::Attachments as Attachments>::Color {
+        self.buffer.get_unchecked(index).0
+    }
+
+    #[inline]
+    unsafe fn set_pixel_unchecked(&mut self, index: usize, color: <Self::Attachments as Attachments>::Color) {
+        self.buffer.get_unchecked_mut(index).0 = color;
     }
 }
 
@@ -96,8 +212,7 @@ macro_rules! declare_texture_buffer {
         impl<A: $crate::attachments::Attachments> $buffer_name<A>
             where <A as $crate::attachments::Attachments>::Color: $crate::attachments::EmptyAttachment {
             pub fn new(dimensions: $crate::framebuffer::Dimensions) -> $buffer_name<A> {
-                let len = dimensions.width  as usize *
-                          dimensions.height as usize;
+                let len = dimensions.pixels();
 
                 $buffer_name {
                     $($color_name: vec![<$color_ty as $crate::attachments::Color>::empty(); len],)+
@@ -135,6 +250,17 @@ macro_rules! declare_texture_buffer {
                     *a = (<A::Depth as $crate::attachments::Depth>::far(), Default::default());
                 }
             }
+
+
+            unsafe fn get_pixel_unchecked(&self, index: usize) -> <Self::Attachments as $crate::attachments::Attachments>::Color {
+                ($(*self.$color_name.get_unchecked(index),)+)
+            }
+
+            unsafe fn set_pixel_unchecked(&mut self, index: usize, color: <Self::Attachments as $crate::attachments::Attachments>::Color) {
+                let ($($color_name,)+) = color;
+
+                $(*self.$color_name.get_unchecked_mut(index) = $color_name;)+
+            }
         }
     }
 }
@@ -143,7 +269,10 @@ pub mod predefined {
     use attachments::color::predefined::formats::RGBAf32Color;
 
     declare_texture_buffer! {
-        /// Texture Buffer with a single RGBA 32-bit Floating Point color
+        /// Texture Buffer with a single RGBA 32-bit Floating Point color.
+        ///
+        /// Unlike the `RenderBuffer`, texture buffers can easily have one or more color attachment
+        /// be reused as a texture for a subsequent render.
         pub struct RGBAf32TextureBuffer {
             /// Primary color buffer
             pub color: RGBAf32Color,
