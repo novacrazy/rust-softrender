@@ -23,6 +23,8 @@ pub type DepthStencilAttachments<D, S> = ColorDepthStencilAttachments<(), D, S>;
 pub type StencilAttachment<S> = ColorDepthStencilAttachments<(), (), S>;
 pub type ColorStencilAttachments<C, S> = ColorDepthStencilAttachments<C, (), S>;
 
+pub type EmptyAttachments = ColorDepthStencilAttachments<(), (), ()>;
+
 #[cfg(test)]
 mod test {
     use std::mem::size_of;
