@@ -82,7 +82,7 @@ impl<T> StencilOp<T> where T: StencilType {
 }
 
 /// Defines a stateful configuration for a stencil buffer
-pub trait StencilConfig<T> {
+pub trait StencilConfig<T>: Clone + Copy + Default {
     /// Return the operation to be performed
     fn op(&self) -> StencilOp<T>;
     /// Return the test to be performed
@@ -94,7 +94,7 @@ pub trait Stencil: super::Attachment {
     /// The inner data type of the stencil buffer
     type Type: super::Attachment + Default;
     /// The configuration type for the stencil buffer. This has only one instance per attachment.
-    type Config: StencilConfig<Self::Type> + Default;
+    type Config: StencilConfig<Self::Type>;
 }
 
 impl StencilConfig<()> for () {
