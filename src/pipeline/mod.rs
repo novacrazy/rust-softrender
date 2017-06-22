@@ -4,6 +4,7 @@ use std::marker::PhantomData;
 use ::mesh::Mesh;
 use ::primitive::Primitive;
 use ::framebuffer::{Dimensions, Framebuffer};
+use ::framebuffer::nullbuffer::NullFramebuffer;
 
 pub mod storage;
 pub mod stages;
@@ -31,6 +32,7 @@ pub trait PipelineObject {
 ///
 /// By itself, it only holds the framebuffer and global uniforms,
 /// but it spawns the first shader stage using those.
+#[derive(Clone)]
 pub struct Pipeline<U, F> {
     framebuffer: F,
     uniforms: U,
@@ -55,15 +57,26 @@ impl<U, F> PipelineObject for Pipeline<U, F> where U: Send + Sync, F: Framebuffe
     fn framebuffer_mut(&mut self) -> &mut Self::Framebuffer { &mut self.framebuffer }
 }
 
-impl<U, F> Pipeline<U, F> where U: Send + Sync, F: Framebuffer {
+impl<U> Pipeline<U, NullFramebuffer> where U: Send + Sync {
     /// Create a new rendering pipeline instance with the desired framebuffer
-    pub fn new(framebuffer: F, uniforms: U) -> Pipeline<U, F> {
+    pub fn new(uniforms: U) -> Pipeline<U, NullFramebuffer> {
+        Pipeline { framebuffer: NullFramebuffer::new(), uniforms }
+    }
+
+    pub fn from_framebuffer<F>(uniforms: U, framebuffer: F) -> Pipeline<U, F> where F: Framebuffer {
+        Self::new(uniforms).with_framebuffer(framebuffer)
+    }
+
+    pub fn with_framebuffer<F>(self, framebuffer: F) -> Pipeline<U, F> where F: Framebuffer {
         let Dimensions { width, height } = framebuffer.dimensions();
 
         assert!(width > 0, "Framebuffer must have a non-zero width");
         assert!(height > 0, "Framebuffer must have a non-zero height");
 
-        Pipeline { framebuffer, uniforms }
+        Pipeline {
+            framebuffer,
+            uniforms: self.uniforms
+        }
     }
 }
 
