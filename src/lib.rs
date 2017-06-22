@@ -59,6 +59,10 @@ extern crate alga;
 extern crate rayon;
 extern crate smallvec;
 
+#[macro_use]
+extern crate trace_error;
+
+pub mod error;
 pub mod utils;
 pub mod mesh;
 pub mod framebuffer;

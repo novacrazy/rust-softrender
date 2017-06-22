@@ -16,6 +16,7 @@ nalgebra = "0.12"
 num-traits = "0.1.39"
 rayon = "0.8.1"
 smallvec = "0.4.0"
+trace-error = "0.1.5"
 
 [dependencies.image]
 optional = true
