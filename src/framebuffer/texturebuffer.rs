@@ -12,6 +12,13 @@ pub struct TextureBufferRef<'a, F: Framebuffer, C: Color> {
     parent: &'a F,
 }
 
+impl<'a, F: Framebuffer, C: Color> TextureBufferRef<'a, F, C> {
+    #[doc(hidden)]
+    pub fn __new(buffer: &'a [C], parent: &'a F) -> TextureBufferRef<'a, F, C> {
+        TextureBufferRef { buffer, parent }
+    }
+}
+
 impl<'a, F: Framebuffer, C: Color> HasDimensions for TextureBufferRef<'a, F, C> {
     #[inline]
     fn dimensions(&self) -> Dimensions { self.parent.dimensions() }
@@ -97,10 +104,7 @@ macro_rules! declare_texture_buffer {
                 $(#[$($field_attrs)*])*
                 #[inline]
                 pub fn $color_name(&self) -> $crate::framebuffer::texturebuffer::TextureBufferRef<Self, $color_ty> {
-                    $crate::framebuffer::texturebuffer::TextureBufferRef {
-                        buffer: &self.$color_name,
-                        parent: self
-                    }
+                    $crate::framebuffer::texturebuffer::TextureBufferRef::__new(&self.$color_name, self)
                 }
             )+
         }
