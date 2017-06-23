@@ -64,6 +64,9 @@ extern crate trace_error;
 
 pub mod error;
 pub mod utils;
+pub mod behavior;
+pub mod color;
+pub mod pixel;
 pub mod mesh;
 pub mod framebuffer;
 pub mod primitive;
@@ -71,6 +74,7 @@ pub mod geometry;
 pub mod interpolate;
 pub mod uniform;
 pub mod clip;
+pub mod texture;
 pub mod pipeline;
 pub mod tuples;
 
