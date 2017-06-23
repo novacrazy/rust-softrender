@@ -1,10 +1,15 @@
-pub mod color;
+use ::behavior::ThreadSafeCopyable;
+
+pub mod color {
+    pub use ::color::*;
+}
+
 pub mod depth;
 pub mod stencil;
 
-pub trait Attachment: Copy + Send + Sync + 'static {}
+pub trait Attachment: ThreadSafeCopyable {}
 
-impl<T> Attachment for T where T: Copy + Send + Sync + 'static {}
+impl<T> Attachment for T where T: ThreadSafeCopyable {}
 
 pub use self::color::Color;
 pub use self::depth::Depth;

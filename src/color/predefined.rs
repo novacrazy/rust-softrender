@@ -1,9 +1,11 @@
 //! Defines standard one to four channel colors of both `f32` and `u8` types.
 
-use num_traits::{Num, Zero};
+use num_traits::Num;
 
 use nalgebra::{Vector1, Vector2, Vector3, Vector4, Scalar};
 use nalgebra::coordinates::XYZW;
+
+use ::behavior::ThreadSafeCopyable;
 
 use super::Color;
 
@@ -53,7 +55,7 @@ pub mod formats {
     }
 }
 
-impl<T> Color for Vector4<T> where T: Scalar + Num + Send + Sync + Default {
+impl<T> Color for Vector4<T> where T: Scalar + Num + ThreadSafeCopyable + Default {
     type Alpha = T;
 
     #[inline]
@@ -79,7 +81,7 @@ impl<T> Color for Vector4<T> where T: Scalar + Num + Send + Sync + Default {
 
 macro_rules! impl_vector_color_without_alpha {
     ($name:ident) => {
-        impl<T> Color for $name<T> where T: Scalar + Num + Send + Sync + Default {
+        impl<T> Color for $name<T> where T: Scalar + Num + ThreadSafeCopyable + Default {
             type Alpha = ();
 
             #[inline]
