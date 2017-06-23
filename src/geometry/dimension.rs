@@ -2,6 +2,12 @@ use ::error::{RenderError, RenderResult};
 
 use super::Coordinate;
 
+/// Defines types with set dimensions
+pub trait HasDimensions {
+    /// Returns the dimensions of the object
+    fn dimensions(&self) -> Dimensions;
+}
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd)]
 pub struct Dimensions {
     pub width: u32,

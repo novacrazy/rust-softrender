@@ -1,3 +1,5 @@
+
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd)]
 pub struct Coordinate {
     pub x: u32,
