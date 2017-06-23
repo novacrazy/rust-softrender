@@ -3,7 +3,8 @@ use std::marker::PhantomData;
 
 use ::mesh::Mesh;
 use ::primitive::Primitive;
-use ::framebuffer::{Dimensions, Framebuffer};
+use ::geometry::Dimensions;
+use ::framebuffer::Framebuffer;
 use ::framebuffer::nullbuffer::NullFramebuffer;
 
 pub mod storage;

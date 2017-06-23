@@ -1,11 +1,13 @@
+#![allow(unused_imports)]
+
 use std::sync::Arc;
 use std::marker::PhantomData;
 use std::ops::Deref;
 
-use ::framebuffer::{Framebuffer, Dimensions};
+use ::framebuffer::Framebuffer;
 use ::primitive::Primitive;
 use ::mesh::Mesh;
-use ::geometry::{ScreenVertex, FaceWinding};
+use ::geometry::{Dimensions, ScreenVertex, FaceWinding};
 use ::interpolate::Interpolate;
 use ::pipeline::storage::SeparableScreenPrimitiveStorage;
 

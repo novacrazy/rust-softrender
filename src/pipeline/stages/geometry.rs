@@ -12,7 +12,6 @@ use ::mesh::Mesh;
 use ::clip::ALL_CLIPPING_PLANES;
 use ::geometry::ClipVertex;
 use ::interpolate::Interpolate;
-use ::framebuffer::Framebuffer;
 use ::pipeline::storage::{PrimitiveStorage, SeparablePrimitiveStorage, SeparableScreenPrimitiveStorage};
 use ::pipeline::{PipelineObject, FragmentShader};
 use ::pipeline::stages::fragment::DEFAULT_TILE_SIZE;

@@ -6,7 +6,6 @@ use rayon::prelude::*;
 
 use ::pipeline::storage::SeparablePrimitiveStorage;
 use ::pipeline::{PipelineObject, GeometryShader};
-use ::framebuffer::Framebuffer;
 use ::primitive::Primitive;
 use ::mesh::{Vertex, Mesh};
 use ::interpolate::Interpolate;
