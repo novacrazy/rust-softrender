@@ -35,7 +35,7 @@ macro_rules! declare_texture_buffer {
         pub struct $buffer_name<A: $crate::attachments::Attachments>
             where <A as $crate::attachments::Attachments>::Color: $crate::attachments::EmptyAttachment {
             $($color_name: Vec<$color_ty>,)+
-            dimensions: $crate::framebuffer::Dimensions,
+            dimensions: $crate::geometry::Dimensions,
             stencil: <A::Stencil as $crate::attachments::Stencil>::Config,
             buffer: Vec<(A::Depth, <A::Stencil as $crate::attachments::Stencil>::Type)>,
         }
@@ -45,13 +45,13 @@ macro_rules! declare_texture_buffer {
             pub fn new() -> $buffer_name<A> {
                 $buffer_name {
                     $($color_name: Vec::new(),)+
-                    dimensions: $crate::framebuffer::Dimensions::new(0, 0),
+                    dimensions: $crate::geometry::Dimensions::new(0, 0),
                     stencil: Default::default(),
                     buffer: Vec::new(),
                 }
             }
 
-            pub fn with_dimensions(dimensions: $crate::framebuffer::Dimensions) -> $buffer_name<A> {
+            pub fn with_dimensions(dimensions: $crate::geometry::Dimensions) -> $buffer_name<A> {
                 let pixels = dimensions.pixels();
 
                 $buffer_name {
@@ -70,11 +70,39 @@ macro_rules! declare_texture_buffer {
             )+
         }
 
+        impl<A: $crate::attachments::Attachments> $crate::geometry::HasDimensions for $buffer_name<A>
+            where <A as $crate::attachments::Attachments>::Color: $crate::attachments::EmptyAttachment {
+            #[inline]
+            fn dimensions(&self) -> $crate::geometry::Dimensions {
+                self.dimensions
+            }
+        }
+
+        impl<A: $crate::attachments::Attachments> $crate::pixel::PixelBuffer for $buffer_name<A>
+            where <A as $crate::attachments::Attachments>::Color: $crate::attachments::EmptyAttachment {
+            /// All texture buffer colors as a tuple
+            type Color = ($($color_ty,)+);
+        }
+
+        impl<A: $crate::attachments::Attachments> $crate::pixel::PixelRead for $buffer_name<A>
+            where <A as $crate::attachments::Attachments>::Color: $crate::attachments::EmptyAttachment {
+            unsafe fn get_pixel_unchecked(&self, index: usize) -> Self::Color {
+                ($(*self.$color_name.get_unchecked(index),)+)
+            }
+        }
+
+        impl<A: $crate::attachments::Attachments> $crate::pixel::PixelWrite for $buffer_name<A>
+            where <A as $crate::attachments::Attachments>::Color: $crate::attachments::EmptyAttachment {
+            unsafe fn set_pixel_unchecked(&mut self, index: usize, color: Self::Color) {
+                let ($($color_name,)+) = color;
+
+                $(*self.$color_name.get_unchecked_mut(index) = $color_name;)+
+            }
+        }
+
         impl<A: $crate::attachments::Attachments> $crate::framebuffer::Framebuffer for $buffer_name<A>
             where <A as $crate::attachments::Attachments>::Color: $crate::attachments::EmptyAttachment {
             type Attachments = $crate::attachments::ColorDepthStencilAttachments<($($color_ty,)+), A::Depth, A::Stencil>;
-
-            fn dimensions(&self) -> $crate::framebuffer::Dimensions { self.dimensions }
 
             fn clear(&mut self, color: <Self::Attachments as $crate::attachments::Attachments>::Color) {
                 // Destructure the tuple into its individual attachments, by name, so they can be used one by one.
@@ -90,17 +118,6 @@ macro_rules! declare_texture_buffer {
                 for mut a in &mut self.buffer {
                     *a = (<A::Depth as $crate::attachments::Depth>::far(), Default::default());
                 }
-            }
-
-
-            unsafe fn get_pixel_unchecked(&self, index: usize) -> <Self::Attachments as $crate::attachments::Attachments>::Color {
-                ($(*self.$color_name.get_unchecked(index),)+)
-            }
-
-            unsafe fn set_pixel_unchecked(&mut self, index: usize, color: <Self::Attachments as $crate::attachments::Attachments>::Color) {
-                let ($($color_name,)+) = color;
-
-                $(*self.$color_name.get_unchecked_mut(index) = $color_name;)+
             }
         }
     }
