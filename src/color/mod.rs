@@ -28,3 +28,6 @@ impl Color for () {
 }
 
 pub mod predefined;
+
+#[doc(hidden)]
+pub fn __assert_color<C: Color>() {}
