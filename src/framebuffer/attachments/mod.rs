@@ -1,8 +1,6 @@
 use ::behavior::ThreadSafeCopyable;
 
-pub mod color {
-    pub use ::color::*;
-}
+pub use ::color;
 
 pub mod depth;
 pub mod stencil;
