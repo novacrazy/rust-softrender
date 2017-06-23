@@ -1,3 +1,33 @@
+use ::color::Color;
+use ::geometry::{Dimensions, HasDimensions};
+use ::pixel::{PixelBuffer, PixelRead, PixelWrite};
+
+use super::Framebuffer;
+
+/// Structure containing a reference to a color buffer from a texture buffer object.
+///
+/// This allows zero-cost access to the buffer as a texture.
+pub struct TextureBufferRef<'a, F: Framebuffer, C: Color> {
+    buffer: &'a [C],
+    parent: &'a F,
+}
+
+impl<'a, F: Framebuffer, C: Color> HasDimensions for TextureBufferRef<'a, F, C> {
+    #[inline]
+    fn dimensions(&self) -> Dimensions { self.parent.dimensions() }
+}
+
+impl<'a, F: Framebuffer, C: Color> PixelBuffer for TextureBufferRef<'a, F, C> {
+    type Color = C;
+}
+
+impl<'a, F: Framebuffer, C: Color> PixelRead for TextureBufferRef<'a, F, C> {
+    #[inline]
+    unsafe fn get_pixel_unchecked(&self, index: usize) -> Self::Color {
+        *self.buffer.get_unchecked(index)
+    }
+}
+
 /// Declares a new texture buffer type with the specified color buffer attachments, as if they were a struct.
 ///
 /// Unlike with the simple `RenderBuffer`, texture buffers store each color component in a separate buffer. This allows
@@ -66,7 +96,12 @@ macro_rules! declare_texture_buffer {
             $(
                 $(#[$($field_attrs)*])*
                 #[inline]
-                pub fn $color_name(&self) -> &[$color_ty] { &self.$color_name }
+                pub fn $color_name(&self) -> $crate::framebuffer::texturebuffer::TextureBufferRef<Self, $color_ty> {
+                    $crate::framebuffer::texturebuffer::TextureBufferRef {
+                        buffer: &self.$color_name,
+                        parent: self
+                    }
+                }
             )+
         }
 
@@ -104,7 +139,7 @@ macro_rules! declare_texture_buffer {
             where <A as $crate::attachments::Attachments>::Color: $crate::attachments::EmptyAttachment {
             type Attachments = $crate::attachments::ColorDepthStencilAttachments<($($color_ty,)+), A::Depth, A::Stencil>;
 
-            fn clear(&mut self, color: <Self::Attachments as $crate::attachments::Attachments>::Color) {
+            fn clear(&mut self, color: ($($color_ty,)+)) {
                 // Destructure the tuple into its individual attachments, by name, so they can be used one by one.
                 let ($($color_name,)+) = color;
 
