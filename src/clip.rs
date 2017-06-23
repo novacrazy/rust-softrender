@@ -1,11 +1,8 @@
 //! Clipping planes
 
-use nalgebra::Vector4;
 use nalgebra::coordinates::XYZW;
 
 use ::{ClipVertex, Interpolate};
-
-use ::pipeline::PrimitiveStorage;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ClippingPlane {
