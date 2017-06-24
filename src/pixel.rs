@@ -21,7 +21,7 @@ pub trait PixelRead: PixelBuffer {
     /// Throws `RenderError::InvalidPixelCoordinate` on invalid pixel coordinates.
     fn pixel_ref<'a>(&'a self, coord: Coordinate) -> RenderResult<PixelRef<'a, Self>> {
         self.dimensions().check_valid(coord).map(|_| {
-            PixelRef::new(coord.into_index(), self)
+            PixelRef::new(coord.into_index(self.dimensions()), self)
         })
     }
 }
@@ -38,7 +38,7 @@ pub trait PixelWrite: PixelRead {
     /// Throws `RenderError::InvalidPixelCoordinate` on invalid pixel coordinates.
     fn pixel_mut<'a>(&'a mut self, coord: Coordinate) -> RenderResult<PixelMut<'a, Self>> {
         self.dimensions().check_valid(coord).map(move |_| {
-            PixelMut::new(coord.into_index(), self)
+            PixelMut::new(coord.into_index(self.dimensions()), self)
         })
     }
 }
