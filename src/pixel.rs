@@ -1,7 +1,7 @@
 //! Pixel accessor structures
 use ::error::RenderResult;
 use ::color::Color;
-use ::geometry::{Coordinate, Dimensions, HasDimensions};
+use ::geometry::{Coordinate, HasDimensions};
 
 /// Generic buffer type trait, which defines the `Color` type for any pixel in the buffer
 pub trait PixelBuffer: Sized + HasDimensions {

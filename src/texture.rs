@@ -1,8 +1,7 @@
-use ::error::{RenderError, RenderResult};
+use ::error::RenderResult;
 
 use ::color::Color;
 use ::pixel::{PixelBuffer, PixelRead, PixelWrite};
-use ::geometry::{Dimensions, Coordinate};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Filter {

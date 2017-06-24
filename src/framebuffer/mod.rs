@@ -1,5 +1,3 @@
-use ::error::RenderResult;
-
 pub mod attachments;
 pub mod nullbuffer;
 pub mod renderbuffer;
@@ -8,7 +6,7 @@ pub mod texturebuffer;
 pub use self::attachments::Attachments;
 pub use self::renderbuffer::RenderBuffer;
 
-use ::geometry::{Coordinate, HasDimensions};
+use ::geometry::HasDimensions;
 use ::pixel::PixelWrite;
 
 pub trait Framebuffer: Sized + Clone + HasDimensions + PixelWrite + 'static {

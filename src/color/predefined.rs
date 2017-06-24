@@ -32,8 +32,7 @@ pub mod formats {
 
     #[cfg(test)]
     mod test {
-        use ::framebuffer::attachments::Color;
-        use ::framebuffer::attachments::color::__assert_color;
+        use ::attachments::color::__assert_color;
 
         use super::*;
 
