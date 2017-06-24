@@ -169,6 +169,7 @@ impl<'a, P: 'a, V, T, K> GeometryShader<'a, P, V, T, K> where P: PipelineObject,
                             let s_in = plane.has_inside(s);
                             let p_in = plane.has_inside(p);
 
+                            // Edge intersects clipping plane
                             if s_in != p_in {
                                 polygon.push(plane.intersect(s, p));
                             }
@@ -191,7 +192,38 @@ impl<'a, P: 'a, V, T, K> GeometryShader<'a, P, V, T, K> where P: PipelineObject,
                         }
                     }
                 }
-                _ => storage.emit(primitive)
+                PrimitiveRef::Line { start, end } => {
+                    let mut start = start.clone();
+                    let mut end = end.clone();
+
+                    let mut intersections = 0;
+
+                    for plane in &ALL_CLIPPING_PLANES {
+                        let s_in = plane.has_inside(&start);
+                        let p_in = plane.has_inside(&end);
+
+                        if s_in != p_in {
+                            let intersection = plane.intersect(&start, &end);
+
+                            if s_in {
+                                end = intersection;
+                            } else if p_in {
+                                start = intersection;
+                            }
+
+                            intersections += 1;
+                        } else if !s_in { return; }
+
+                        if intersections > 2 { break; }
+                    }
+
+                    storage.emit_line(start, end)
+                }
+                PrimitiveRef::Point(point) => {
+                    if ALL_CLIPPING_PLANES.iter().all(|plane| plane.has_inside(&point)) {
+                        storage.emit_point(point.clone());
+                    }
+                }
             }
         })
     }
