@@ -175,4 +175,23 @@ pub mod predefined {
             pub color: RGBAf32Color,
         }
     }
+
+    #[cfg(test)]
+    mod test {
+        use super::*;
+
+        use ::texture::TextureRead;
+        use ::attachments::predefined::EmptyAttachments;
+
+        fn assert_texture<T: TextureRead>(_: T) {}
+
+        #[test]
+        fn test_texturebuffer_texture() {
+            let t = RGBAf32TextureBuffer::<EmptyAttachments>::new();
+
+            let color = t.color();
+
+            assert_texture(color)
+        }
+    }
 }
