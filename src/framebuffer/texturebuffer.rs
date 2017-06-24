@@ -1,6 +1,6 @@
 use ::color::Color;
 use ::geometry::{Dimensions, HasDimensions};
-use ::pixel::{PixelBuffer, PixelRead, PixelWrite};
+use ::pixel::{PixelBuffer, PixelRead};
 
 use super::Framebuffer;
 
@@ -102,7 +102,7 @@ macro_rules! declare_texture_buffer {
 
             $(
                 $(#[$($field_attrs)*])*
-                #[inline]
+                #[inline(always)]
                 pub fn $color_name(&self) -> $crate::framebuffer::texturebuffer::TextureBufferRef<Self, $color_ty> {
                     $crate::framebuffer::texturebuffer::TextureBufferRef::__new(&self.$color_name, self)
                 }
