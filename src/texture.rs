@@ -48,6 +48,12 @@ pub trait TextureWrite: Texture + PixelWrite {
     }
 }
 
+impl<T> Texture for T where T: PixelBuffer {}
+
+impl<T> TextureRead for T where T: Texture + PixelRead {}
+
+impl<T> TextureWrite for T where T: Texture + PixelWrite {}
+
 //pub struct SliceTexture<'a, C: Color + 'a> {
 //    slice: &'a C,
 //    dimensions: Dimensions,
