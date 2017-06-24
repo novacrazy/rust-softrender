@@ -1,11 +1,59 @@
 //! Pixel accessor structures
-use ::error::RenderResult;
+use ::error::{RenderResult, RenderError};
 use ::color::Color;
-use ::geometry::{Coordinate, HasDimensions};
+use ::geometry::{Dimensions, Coordinate, HasDimensions};
+
+/*
+/// Partial `PixelBuffer` taken from a full `PixelBuffer`,
+/// allowing operations on subspaces.
+pub struct SubPixelBuffer<'a, P: 'a> {
+    parent: &'a P,
+    start: Coordinate,
+    end: Coordinate,
+}
+
+impl<'a, P: 'a> SubPixelBuffer<'a, P> {
+    /// The start, or bottom left corner, of the partial `PixelBuffer` in relation to the parent `PixelBuffer`
+    #[inline]
+    pub fn start(&self) -> Coordinate { self.start }
+
+    /// The end, or top right corner, of the partial `PixelBuffer` in relation to the parent `PixelBuffer`
+    #[inline]
+    pub fn end(&self) -> Coordinate { self.end }
+
+    /// Reference to the parent `PixelBuffer`
+    #[inline]
+    pub fn parent(&self) -> &'a P { self.parent }
+}
+
+impl<'a, P: 'a> HasDimensions for SubPixelBuffer<'a, P> {
+    fn dimensions(&self) -> Dimensions {
+        self.end - self.start
+    }
+}
+
+impl<'a, P: 'a> PixelBuffer for SubPixelBuffer<'a, P> where P: PixelBuffer {
+    type Color = <P as PixelBuffer>::Color;
+}
+
+impl<'a, P: 'a> PixelRead for SubPixelBuffer<'a, P> where P: PixelRead {
+    unsafe fn get_pixel_unchecked(&self, index: usize) -> Self::Color {
+        self.parent.get_pixel_unchecked(index)
+    }
+}
+*/
 
 /// Generic buffer type trait, which defines the `Color` type for any pixel in the buffer
 pub trait PixelBuffer: Sized + HasDimensions {
     type Color: Color;
+
+    //fn sub_pixelbuffer(&self, start: Coordinate, end: Coordinate) -> RenderResult<SubPixelBuffer<Self>> {
+    //    if start < end {
+    //        Ok(SubPixelBuffer { parent: self, start, end })
+    //    } else {
+    //        throw!(RenderError::InvalidPixelCoordinate);
+    //    }
+    //}
 }
 
 /// Defines unsafe methods for reading raw pixel values.
@@ -20,9 +68,13 @@ pub trait PixelRead: PixelBuffer {
     ///
     /// Throws `RenderError::InvalidPixelCoordinate` on invalid pixel coordinates.
     fn pixel_ref<'a>(&'a self, coord: Coordinate) -> RenderResult<PixelRef<'a, Self>> {
-        self.dimensions().check_valid(coord).map(|_| {
-            PixelRef::new(coord.into_index(self.dimensions()), self)
-        })
+        let dim = self.dimensions();
+
+        if dim.in_bounds(coord) {
+            Ok(PixelRef::new(coord.into_index(dim), self))
+        } else {
+            throw!(RenderError::InvalidPixelCoordinate);
+        }
     }
 }
 
@@ -37,9 +89,13 @@ pub trait PixelWrite: PixelRead {
     ///
     /// Throws `RenderError::InvalidPixelCoordinate` on invalid pixel coordinates.
     fn pixel_mut<'a>(&'a mut self, coord: Coordinate) -> RenderResult<PixelMut<'a, Self>> {
-        self.dimensions().check_valid(coord).map(move |_| {
-            PixelMut::new(coord.into_index(self.dimensions()), self)
-        })
+        let dim = self.dimensions();
+
+        if dim.in_bounds(coord) {
+            Ok(PixelMut::new(coord.into_index(dim), self))
+        } else {
+            throw!(RenderError::InvalidPixelCoordinate);
+        }
     }
 }
 

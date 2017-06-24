@@ -66,7 +66,7 @@ pub mod error;
 pub mod utils;
 pub mod behavior;
 pub mod color;
-pub mod pixel;
+pub mod pixels;
 pub mod mesh;
 pub mod framebuffer;
 pub mod primitive;
@@ -78,8 +78,8 @@ pub mod texture;
 pub mod pipeline;
 pub mod tuples;
 
-//#[cfg(feature = "image_compat")]
-//pub mod image_compat;
+#[cfg(feature = "image_compat")]
+pub mod image;
 
 pub use mesh::{Vertex, Mesh};
 pub use geometry::{FaceWinding, ClipVertex, ScreenVertex};

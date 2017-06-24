@@ -2,7 +2,7 @@ use super::image::{Pixel, GenericImage, Primitive, Rgb, Luma, Rgba, LumaA};
 
 use ::behavior::ThreadSafeCopyable;
 use ::geometry::{Coordinate, Dimensions, HasDimensions};
-use ::pixel::{PixelBuffer, PixelRead, PixelWrite};
+use ::pixels::{PixelBuffer, PixelRead, PixelWrite};
 use ::color::Color;
 
 impl<T> HasDimensions for T where T: GenericImage {

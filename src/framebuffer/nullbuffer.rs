@@ -1,5 +1,5 @@
 use ::geometry::{Dimensions, HasDimensions};
-use ::pixel::{PixelBuffer, PixelRead, PixelWrite};
+use ::pixels::{PixelBuffer, PixelRead, PixelWrite};
 
 use super::{Framebuffer, attachments, Attachments};
 

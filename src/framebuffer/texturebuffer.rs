@@ -1,6 +1,6 @@
 use ::color::Color;
 use ::geometry::{Dimensions, HasDimensions};
-use ::pixel::{PixelBuffer, PixelRead};
+use ::pixels::{PixelBuffer, PixelRead};
 
 use super::Framebuffer;
 
@@ -89,7 +89,7 @@ macro_rules! declare_texture_buffer {
             }
 
             pub fn with_dimensions(dimensions: $crate::geometry::Dimensions) -> $buffer_name<A> {
-                let pixels = dimensions.pixels();
+                let pixels = dimensions.area();
 
                 $buffer_name {
                     $($color_name: vec![<$color_ty as $crate::attachments::Color>::empty(); pixels],)+
@@ -117,20 +117,20 @@ macro_rules! declare_texture_buffer {
             }
         }
 
-        impl<A: $crate::attachments::Attachments> $crate::pixel::PixelBuffer for $buffer_name<A>
+        impl<A: $crate::attachments::Attachments> $crate::pixels::PixelBuffer for $buffer_name<A>
             where <A as $crate::attachments::Attachments>::Color: $crate::attachments::EmptyAttachment {
             /// All texture buffer colors as a tuple
             type Color = ($($color_ty,)+);
         }
 
-        impl<A: $crate::attachments::Attachments> $crate::pixel::PixelRead for $buffer_name<A>
+        impl<A: $crate::attachments::Attachments> $crate::pixels::PixelRead for $buffer_name<A>
             where <A as $crate::attachments::Attachments>::Color: $crate::attachments::EmptyAttachment {
             unsafe fn get_pixel_unchecked(&self, index: usize) -> Self::Color {
                 ($(*self.$color_name.get_unchecked(index),)+)
             }
         }
 
-        impl<A: $crate::attachments::Attachments> $crate::pixel::PixelWrite for $buffer_name<A>
+        impl<A: $crate::attachments::Attachments> $crate::pixels::PixelWrite for $buffer_name<A>
             where <A as $crate::attachments::Attachments>::Color: $crate::attachments::EmptyAttachment {
             unsafe fn set_pixel_unchecked(&mut self, index: usize, color: Self::Color) {
                 let ($($color_name,)+) = color;

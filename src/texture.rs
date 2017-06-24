@@ -1,7 +1,7 @@
 use ::error::RenderResult;
 
 use ::color::Color;
-use ::pixel::{PixelBuffer, PixelRead, PixelWrite};
+use ::pixels::{PixelBuffer, PixelRead, PixelWrite};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Filter {

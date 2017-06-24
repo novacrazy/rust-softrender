@@ -7,7 +7,7 @@ pub use self::attachments::Attachments;
 pub use self::renderbuffer::RenderBuffer;
 
 use ::geometry::HasDimensions;
-use ::pixel::PixelWrite;
+use ::pixels::PixelWrite;
 
 pub trait Framebuffer: Sized + Clone + HasDimensions + PixelWrite + 'static {
     /// Associated type for the framebuffer attachments

@@ -1,5 +1,5 @@
 use ::geometry::{Dimensions, HasDimensions};
-use ::pixel::{PixelBuffer, PixelRead, PixelWrite};
+use ::pixels::{PixelBuffer, PixelRead, PixelWrite};
 
 use super::{Framebuffer, Attachments};
 use super::attachments::{Color, Depth, Stencil};
@@ -63,7 +63,7 @@ impl<A: Attachments> RenderBuffer<A> {
             buffer: vec![(<A::Color as Color>::empty(),
                           <A::Depth as Depth>::far(),
                           Default::default());
-                         dimensions.pixels()]
+                         dimensions.area()]
         }
     }
 }
