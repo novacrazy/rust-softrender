@@ -6,6 +6,14 @@ pub struct PixelBufferIter<'a, P: 'a> where P: PixelRead {
     pub ( in ::pixels) max_len: usize,
 }
 
+impl<'a, P: 'a> Clone for PixelBufferIter<'a, P> where P: PixelRead {
+    fn clone(&self) -> PixelBufferIter<'a, P> {
+        PixelBufferIter { ..*self }
+    }
+}
+
+impl<'a, P: 'a> Copy for PixelBufferIter<'a, P> where P: PixelRead {}
+
 impl<'a, P: 'a> DoubleEndedIterator for PixelBufferIter<'a, P> where P: PixelRead {
     fn next_back(&mut self) -> Option<PixelRef<'a, P>> {
         if self.position == 0 { None } else {

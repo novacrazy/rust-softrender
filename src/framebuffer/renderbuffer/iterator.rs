@@ -9,6 +9,14 @@ pub struct RenderBufferPixelRef<'a, A: Attachments> {
     item: &'a (A::Color, A::Depth, <A::Stencil as Stencil>::Type),
 }
 
+impl<'a, A: Attachments> Clone for RenderBufferPixelRef<'a, A> {
+    fn clone(&self) -> RenderBufferPixelRef<'a, A> {
+        RenderBufferPixelRef { ..*self }
+    }
+}
+
+impl<'a, A: Attachments> Copy for RenderBufferPixelRef<'a, A> {}
+
 impl<'a, A: Attachments> RenderBufferPixelRef<'a, A> {
     /// Return a reference to the pixel color value
     #[inline]
@@ -53,6 +61,12 @@ pub struct RenderBufferIter<'a, A: Attachments> {
     pub ( in ::framebuffer::renderbuffer) iter: slice::Iter<'a, (A::Color, A::Depth, <A::Stencil as Stencil>::Type)>,
 }
 
+impl<'a, A: Attachments> Clone for RenderBufferIter<'a, A> {
+    fn clone(&self) -> RenderBufferIter<'a, A> {
+        RenderBufferIter { iter: self.iter.clone() }
+    }
+}
+
 /// Iterator for mutating `RenderBuffer` pixel values
 pub struct RenderBufferIterMut<'a, A: Attachments> {
     pub ( in ::framebuffer::renderbuffer) iter: slice::IterMut<'a, (A::Color, A::Depth, <A::Stencil as Stencil>::Type)>,
@@ -75,17 +89,17 @@ impl<'a, A: Attachments> DoubleEndedIterator for RenderBufferIter<'a, A> {
 }
 
 impl<'a, A: Attachments> Iterator for RenderBufferIterMut<'a, A> {
-    type Item = &'a mut A::Color;
+    type Item = RenderBufferPixelMut<'a, A>;
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next().map(|&mut (ref mut color, _, _)| color)
+        self.iter.next().map(|item| RenderBufferPixelMut { item })
     }
 }
 
 impl<'a, A: Attachments> DoubleEndedIterator for RenderBufferIterMut<'a, A> {
     #[inline]
     fn next_back(&mut self) -> Option<Self::Item> {
-        self.iter.next_back().map(|&mut (ref mut color, _, _)| color)
+        self.iter.next_back().map(|item| RenderBufferPixelMut { item })
     }
 }
