@@ -11,10 +11,13 @@ pub struct RenderBufferPixelRef<'a, A: Attachments> {
 
 impl<'a, A: Attachments> RenderBufferPixelRef<'a, A> {
     /// Return a reference to the pixel color value
+    #[inline]
     pub fn color(&self) -> &A::Color { &self.item.0 }
     /// Return a reference to the pixel depth value
+    #[inline]
     pub fn depth(&self) -> &A::Depth { &self.item.1 }
     /// Return a reference to the pixel stencil value
+    #[inline]
     pub fn stencil(&self) -> &<A::Stencil as Stencil>::Type { &self.item.2 }
 }
 
@@ -25,17 +28,23 @@ pub struct RenderBufferPixelMut<'a, A: Attachments> {
 
 impl<'a, A: Attachments> RenderBufferPixelMut<'a, A> {
     /// Return a reference to the pixel color value
+    #[inline]
     pub fn color(&self) -> &A::Color { &self.item.0 }
     /// Return a reference to the pixel depth value
+    #[inline]
     pub fn depth(&self) -> &A::Depth { &self.item.1 }
     /// Return a reference to the pixel stencil value
+    #[inline]
     pub fn stencil(&self) -> &<A::Stencil as Stencil>::Type { &self.item.2 }
 
     /// Return a mutable reference to the pixel color value
+    #[inline]
     pub fn color_mut(&mut self) -> &mut A::Color { &mut self.item.0 }
     /// Return a mutable reference to the pixel depth value
+    #[inline]
     pub fn depth_mut(&mut self) -> &mut A::Depth { &mut self.item.1 }
     /// Return a mutable reference to the pixel stencil value
+    #[inline]
     pub fn stencil_mut(&mut self) -> &mut <A::Stencil as Stencil>::Type { &mut self.item.2 }
 }
 
@@ -59,6 +68,7 @@ impl<'a, A: Attachments> Iterator for RenderBufferIter<'a, A> {
 }
 
 impl<'a, A: Attachments> DoubleEndedIterator for RenderBufferIter<'a, A> {
+    #[inline]
     fn next_back(&mut self) -> Option<Self::Item> {
         self.iter.next_back().map(|item| RenderBufferPixelRef { item })
     }
@@ -74,6 +84,7 @@ impl<'a, A: Attachments> Iterator for RenderBufferIterMut<'a, A> {
 }
 
 impl<'a, A: Attachments> DoubleEndedIterator for RenderBufferIterMut<'a, A> {
+    #[inline]
     fn next_back(&mut self) -> Option<Self::Item> {
         self.iter.next_back().map(|&mut (ref mut color, _, _)| color)
     }
