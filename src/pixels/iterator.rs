@@ -1,4 +1,4 @@
-use super::{PixelBuffer, PixelRead, PixelWrite, PixelRef, PixelMut};
+use super::{PixelRead, PixelWrite, PixelRef, PixelMut};
 
 pub struct PixelBufferIter<'a, P: 'a> where P: PixelRead {
     pub ( in ::pixels) buffer: &'a P,

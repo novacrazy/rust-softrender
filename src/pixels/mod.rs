@@ -1,9 +1,7 @@
 //! Pixel accessor structures
-use std::slice;
-
 use ::error::{RenderResult, RenderError};
 use ::color::Color;
-use ::geometry::{Dimensions, Coordinate, HasDimensions};
+use ::geometry::{Coordinate, HasDimensions};
 
 pub mod iterator;
 
@@ -13,7 +11,6 @@ pub use self::iterator::PixelBufferIter;
 pub trait PixelBuffer: Sized + HasDimensions {
     type Color: Color;
 }
-
 
 /// Defines methods for reading raw pixel values.
 pub trait PixelRead: PixelBuffer {
