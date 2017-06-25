@@ -1,5 +1,3 @@
-//! Implements traits for tuples
-
 macro_rules! tuple_impls {
     ($(
         $Tuple:ident {

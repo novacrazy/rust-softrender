@@ -76,7 +76,6 @@ pub mod uniform;
 pub mod clip;
 pub mod texture;
 pub mod pipeline;
-pub mod tuples;
 
 #[cfg(feature = "image_compat")]
 pub mod image;
@@ -89,3 +88,5 @@ pub use primitive::{Primitive, PrimitiveRef, PrimitiveMut};
 pub use pipeline::{Pipeline, PipelineObject,
                    VertexShader, GeometryShader, FragmentShader,
                    PrimitiveStorage};
+
+include!("tuples.rs");
