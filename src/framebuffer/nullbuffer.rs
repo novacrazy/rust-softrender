@@ -5,40 +5,48 @@ use ::pixels::{PixelBuffer, PixelRead, PixelWrite};
 
 use super::{Framebuffer, attachments, Attachments};
 
+/// Black-hole Framebuffer that stores no pixels but still has dimensions.
+///
+/// Reading/writing to this framebuffer will do absolutely nothing.
 #[derive(Debug, Clone, Copy)]
 pub struct NullFramebuffer {
     dimensions: Dimensions,
 }
 
 impl HasDimensions for NullFramebuffer {
+    #[inline]
     fn dimensions(&self) -> Dimensions { self.dimensions }
 }
 
 impl PixelBuffer for NullFramebuffer {
-    type Color = <<Self as Framebuffer>::Attachments as Attachments>::Color;
+    type Color = ();
 }
 
 impl PixelRead for NullFramebuffer {
+    #[inline(always)]
     unsafe fn get_pixel_unchecked(&self, _: usize) -> () { () }
 }
 
 impl PixelWrite for NullFramebuffer {
+    #[inline(always)]
     unsafe fn set_pixel_unchecked(&mut self, _: usize, _: ()) {}
 }
 
 impl Framebuffer for NullFramebuffer {
     type Attachments = attachments::predefined::EmptyAttachments;
 
+    #[inline(always)]
     fn clear(&mut self, _: ()) {}
 }
 
 impl NullFramebuffer {
+    /// Create a new `NullFramebuffer` with no size
+    #[inline]
     pub fn new() -> NullFramebuffer {
-        NullFramebuffer {
-            dimensions: Dimensions::new(0, 0)
-        }
+        NullFramebuffer::with_dimensions(Dimensions::new(0, 0))
     }
 
+    /// Create a new `NullFramebuffer` with the given dimensions
     pub fn with_dimensions(dimensions: Dimensions) -> NullFramebuffer {
         NullFramebuffer { dimensions }
     }
