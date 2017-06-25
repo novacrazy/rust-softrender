@@ -77,6 +77,14 @@ pub trait PixelWrite: PixelRead {
 pub struct PixelRef<'a, P: 'a>(pub ( in ::pixels) usize,
                                pub ( in ::pixels) &'a P) where P: PixelRead;
 
+impl<'a, P: 'a> Clone for PixelRef<'a, P> where P: PixelRead {
+    fn clone(&self) -> PixelRef<'a, P> {
+        PixelRef { ..*self }
+    }
+}
+
+impl<'a, P: 'a> Copy for PixelRef<'a, P> where P: PixelRead {}
+
 /// Mutable reference to a pixel
 ///
 /// Provides a writable accessor for the pixel at the coordinates given at creation.
