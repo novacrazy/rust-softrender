@@ -214,6 +214,8 @@ impl<'a, P: 'a, V, T, K> GeometryShader<'a, P, V, T, K> where P: PipelineObject,
                             intersections += 1;
                         } else if !s_in { return; }
 
+                        // A line segment can only intersect with two planes at a time,
+                        // so skip the rest when two intersections are found.
                         if intersections > 2 { break; }
                     }
 
