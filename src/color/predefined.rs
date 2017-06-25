@@ -8,6 +8,7 @@ use nalgebra::coordinates::XYZW;
 use ::behavior::ThreadSafeCopyable;
 
 use super::Color;
+use super::helper::AlphaMultiply;
 
 pub mod formats {
     use nalgebra::{Vector1, Vector2, Vector3, Vector4};
@@ -51,10 +52,20 @@ pub mod formats {
             __assert_color::<RGu8Color>();
             __assert_color::<Ru8Color>();
         }
+
+        #[test]
+        fn test_misc_color_assert() {
+            __assert_color::<Vector3<u16>>();
+            __assert_color::<Vector3<i64>>();
+            __assert_color::<Vector2<f32>>();
+            __assert_color::<Vector1<f64>>();
+            __assert_color::<Vector2<usize>>();
+            __assert_color::<Vector2<isize>>();
+        }
     }
 }
 
-impl<T> Color for Vector4<T> where T: Scalar + Num + ThreadSafeCopyable + Default {
+impl<T> Color for Vector4<T> where T: Scalar + Num + AlphaMultiply + ThreadSafeCopyable + Default {
     type Alpha = T;
 
     #[inline]
@@ -71,7 +82,7 @@ impl<T> Color for Vector4<T> where T: Scalar + Num + ThreadSafeCopyable + Defaul
     fn mul_alpha(self, alpha: T) -> Vector4<T> {
         let XYZW { x, y, z, w } = *self;
 
-        Vector4::new(x, y, z, w * alpha)
+        Vector4::new(x, y, z, AlphaMultiply::mul_alpha(w, alpha))
     }
 
     #[inline]

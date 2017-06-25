@@ -3,6 +3,9 @@
 use ::behavior::ThreadSafeCopyable;
 
 pub mod blend;
+pub mod helper;
+
+pub use self::helper::AlphaMultiply;
 
 /// Defines a Color buffer attachment
 pub trait Color: ThreadSafeCopyable {
