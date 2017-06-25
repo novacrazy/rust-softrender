@@ -1,3 +1,5 @@
+//! Black-hole Framebuffer
+
 use ::geometry::{Dimensions, HasDimensions};
 use ::pixels::{PixelBuffer, PixelRead, PixelWrite};
 
