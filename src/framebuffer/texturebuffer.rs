@@ -1,10 +1,14 @@
+//! Flexible custom Framebuffer designed for re-use
+
+use std::slice;
+
 use ::color::Color;
 use ::geometry::{Dimensions, HasDimensions};
 use ::pixels::{PixelBuffer, PixelRead};
 
 use super::Framebuffer;
 
-/// Structure containing a reference to a color buffer from a texture buffer object.
+/// Structure containing a reference to a specific color buffer from a texture buffer object.
 ///
 /// This allows zero-cost access to the buffer as a texture.
 pub struct TextureBufferRef<'a, F: Framebuffer, C: Color> {
@@ -17,6 +21,9 @@ impl<'a, F: Framebuffer, C: Color> TextureBufferRef<'a, F, C> {
     pub fn __new(buffer: &'a [C], parent: &'a F) -> TextureBufferRef<'a, F, C> {
         TextureBufferRef { buffer, parent }
     }
+
+    /// Returns a iterator to the underlying color buffer
+    pub fn iter(&self) -> slice::Iter<C> { self.buffer.iter() }
 }
 
 impl<'a, F: Framebuffer, C: Color> HasDimensions for TextureBufferRef<'a, F, C> {
