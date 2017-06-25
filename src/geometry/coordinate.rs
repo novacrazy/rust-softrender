@@ -41,7 +41,7 @@ impl Coordinate {
         x as usize + y as usize * dimensions.height as usize
     }
 
-    /// Conveert a 1D array index into a 2D coordinate using the given `Dimensions`
+    /// Convert a 1D array index into a 2D coordinate using the given `Dimensions`
     #[inline]
     pub fn from_index(index: usize, dimensions: Dimensions) -> Coordinate {
         let Dimensions { width, height } = dimensions;
