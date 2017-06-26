@@ -1,6 +1,7 @@
 //! Storage structures
 
-use ::{ClipVertex, ScreenVertex, PrimitiveRef};
+use ::geometry::{ClipVertex, ScreenVertex};
+use ::primitive::PrimitiveRef;
 
 #[derive(Clone)]
 pub ( in ::pipeline ) struct SeparablePrimitiveStorage<K> {

@@ -25,15 +25,15 @@ macro_rules! tuple_impls {
                 }
             }
 
-            impl<$($T),+> $crate::Interpolate for ($($T,)+) where $($T: $crate::Interpolate,)+ {
+            impl<$($T),+> $crate::interpolate::Interpolate for ($($T,)+) where $($T: $crate::interpolate::Interpolate,)+ {
                 fn barycentric_interpolate(u: f32, ux: &Self, v: f32, vx: &Self, w: f32, wx: &Self) -> Self{
-                    ($($crate::Interpolate::barycentric_interpolate(u, &ux.$idx,
+                    ($($crate::interpolate::Interpolate::barycentric_interpolate(u, &ux.$idx,
                                                                     v, &vx.$idx,
                                                                     w, &wx.$idx),)+)
                 }
 
                 fn linear_interpolate(t: f32, x1: &Self, x2: &Self) -> Self {
-                    ($($crate::Interpolate::linear_interpolate(t, &x1.$idx, &x2.$idx),)+)
+                    ($($crate::interpolate::Interpolate::linear_interpolate(t, &x1.$idx, &x2.$idx),)+)
                 }
             }
         )+

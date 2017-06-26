@@ -139,8 +139,8 @@ impl<N, D: DimName, S> Interpolate for RotationBase<N, D, S> where N: Scalar,
 // Format of this was taken from nalgebra/core/construction.rs
 macro_rules! nalgebra_matrix_uniforms {
     ($($R: ty, $C: ty, $($args: ident:($irow: expr,$icol: expr)),*);* $(;)*) => {$(
-        impl<N, S> $crate::Interpolate for Matrix<N, $R, $C, S>
-            where N: Scalar + $crate::Interpolate,
+        impl<N, S> $crate::interpolate::Interpolate for Matrix<N, $R, $C, S>
+            where N: Scalar + $crate::interpolate::Interpolate,
                   S: OwnedStorage<N, $R, $C>,
                   S::Alloc: OwnedAllocator<N, $R, $C, S> {
             #[inline]
@@ -149,7 +149,7 @@ macro_rules! nalgebra_matrix_uniforms {
                     let mut res = Self::new_uninitialized();
 
                     $(
-                        *res.get_unchecked_mut($irow, $icol) = $crate::Interpolate::barycentric_interpolate(
+                        *res.get_unchecked_mut($irow, $icol) = $crate::interpolate::Interpolate::barycentric_interpolate(
                             u, ux.get_unchecked($irow, $icol),
                             v, vx.get_unchecked($irow, $icol),
                             w, wx.get_unchecked($irow, $icol)
@@ -166,7 +166,7 @@ macro_rules! nalgebra_matrix_uniforms {
                     let mut res = Self::new_uninitialized();
 
                     $(
-                        *res.get_unchecked_mut($irow, $icol) = $crate::Interpolate::linear_interpolate(
+                        *res.get_unchecked_mut($irow, $icol) = $crate::interpolate::Interpolate::linear_interpolate(
                             t, x1.get_unchecked($irow, $icol), x2.get_unchecked($irow, $icol)
                         );
                     )*

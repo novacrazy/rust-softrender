@@ -2,7 +2,8 @@
 
 use nalgebra::coordinates::XYZW;
 
-use ::{ClipVertex, Interpolate};
+use ::geometry::ClipVertex;
+use ::interpolate::Interpolate;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ClippingPlane {

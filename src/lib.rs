@@ -79,14 +79,19 @@ pub mod pipeline;
 #[cfg(feature = "image_compat")]
 pub mod image;
 
-pub use mesh::{Vertex, Mesh};
-pub use geometry::{FaceWinding, ClipVertex, ScreenVertex};
-pub use framebuffer::{attachments, Framebuffer};
-pub use interpolate::Interpolate;
-pub use primitive::{Primitive, PrimitiveRef, PrimitiveMut};
-pub use pipeline::{Pipeline, PipelineObject,
-                   VertexShader, GeometryShader, FragmentShader,
-                   PrimitiveStorage};
+pub use framebuffer::attachments;
+
+pub mod prelude {
+    pub use ::geometry::{Dimensions, HasDimensions, Coordinate, ClipVertex, ScreenVertex, FaceWinding};
+    pub use ::primitive::{Primitive, Point, Line, Triangle, PrimitiveRef, PrimitiveMut};
+    pub use ::mesh::{Vertex, Mesh};
+    pub use ::framebuffer::{Framebuffer, RenderBuffer, Attachments};
+    pub use ::interpolate::Interpolate;
+    pub use ::pipeline::{Pipeline, PipelineObject,
+                         VertexShader, GeometryShader, FragmentShader,
+                         PrimitiveStorage};
+    pub use ::pipeline::stages::fragment::Fragment;
+}
 
 include!("macros.rs");
 include!("tuples.rs");
