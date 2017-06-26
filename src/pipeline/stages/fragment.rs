@@ -1,15 +1,15 @@
-#![allow(unused_imports)]
-
 use std::sync::Arc;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
+
+use rayon::prelude::*;
 
 use ::color::Color;
 use ::color::blend::Blend;
 use ::framebuffer::{Attachments, Framebuffer};
 use ::primitive::Primitive;
 use ::mesh::Mesh;
-use ::geometry::{Dimensions, ScreenVertex, FaceWinding};
+use ::geometry::{Dimensions, HasDimensions, Coordinate, ScreenVertex, FaceWinding};
 use ::interpolate::Interpolate;
 use ::pipeline::storage::SeparableScreenPrimitiveStorage;
 
@@ -132,6 +132,50 @@ impl<'a, P: 'a, V, T, K, B> FragmentShader<'a, P, V, T, K, B>
           B: Blend<ColorAttachment<P>> {
     pub fn run<S>(self, fragment_shader: S)
         where S: Fn(&ScreenVertex<K>, &PipelineUniforms<P>) -> Fragment<ColorAttachment<P>> + Send + Sync {
-        unimplemented!()
+        let FragmentShader {
+            pipeline,
+            mesh,
+            indexed_vertices,
+            generated_primitives,
+            cull_faces,
+            blend,
+            antialiased_lines,
+            tile_size,
+            ..
+        } = self;
+
+        let dimensions = pipeline.framebuffer().dimensions();
+
+        let tiles = {
+            let mut tiles = Vec::new();
+
+            let mut y = 0;
+
+            while y < dimensions.height {
+                let mut x = 0;
+
+                let next_y = y + tile_size.height;
+
+                while x < dimensions.width {
+                    let next_x = x + tile_size.width;
+
+                    tiles.push((
+                        Coordinate::new(x, y),
+                        Coordinate::new(next_x, next_y)
+                    ));
+
+                    x = next_x;
+                }
+
+                y = next_y;
+            }
+
+            tiles
+        };
+
+        tiles.into_par_iter().for_each(|tile| {
+            println!("Tile {:?}", tile);
+            //render
+        });
     }
 }
