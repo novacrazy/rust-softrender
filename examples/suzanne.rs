@@ -11,10 +11,14 @@ use std::path::Path;
 
 use nalgebra::{Point3, Vector4, Vector3, Matrix4};
 
-use softrender::pixel::RGBAf32Pixel;
+use softrender::color::predefined::formats::RGBAf32Color;
+use softrender::geometry::{Dimensions, HasDimensions, ClipVertex};
+use softrender::primitive;
 use softrender::mesh::{Mesh, Vertex};
-use softrender::render::{FrameBuffer, Pipeline, ClipVertex, Fragment};
-use softrender::image_compat::ImageFrameBuffer;
+use softrender::attachments::predefined::ColorDepthAttachments;
+use softrender::framebuffer::{Framebuffer, RenderBuffer};
+use softrender::pipeline::{Pipeline, PipelineObject};
+use softrender::pipeline::stages::fragment::Fragment;
 
 /// Defines data stored alongside vertex position
 struct VertexData {
@@ -61,6 +65,7 @@ struct GlobalUniforms {
 // Define shader uniforms that can be interpolated on the triangle.
 // The declare_uniforms! macro helps implement the Barycentric trait on the resulting structure
 declare_uniforms! {
+    #[derive(Debug, Clone, Copy)]
     pub struct Uniforms {
         pub position: Vector4<f32>,
         pub normal: Vector4<f32>,
@@ -70,8 +75,9 @@ declare_uniforms! {
 
 #[allow(non_snake_case)]
 fn main() {
-    // Create the image framebuffer with a near-black background
-    let framebuffer = FrameBuffer::<RGBAf32Pixel>::new_with(2000, 2000, RGBAf32Pixel { r: 0.01, g: 0.01, b: 0.01, a: 1.0 });
+    let mut framebuffer = RenderBuffer::<ColorDepthAttachments<RGBAf32Color, f32>>::with_dimensions(Dimensions::new(2000, 2000));
+
+    framebuffer.clear(RGBAf32Color::new(0.01, 0.01, 0.01, 1.0));
 
     // Create the model transform
     let model = nalgebra::Isometry3::new(Vector3::new(0.0, 0.0, 0.0),
@@ -88,13 +94,13 @@ fn main() {
     ).to_homogeneous();
 
     // Create a perspective projection matrix
-    let projection = nalgebra::Perspective3::new(framebuffer.width() as f32 / framebuffer.height() as f32,
+    let projection = nalgebra::Perspective3::new(framebuffer.dimensions().width as f32 / framebuffer.dimensions().height as f32,
                                                  75.0f32.to_radians(), 0.001, 1000.0).to_homogeneous();
 
     // Create a new rendering pipeline and give it all the global uniforms.
     //
     // The global uniforms can be changed between renders by using pipeline.uniforms_mut()
-    let mut pipeline = Pipeline::new(framebuffer, GlobalUniforms {
+    let mut pipeline = Pipeline::from_framebuffer(framebuffer, GlobalUniforms {
         camera: camera_position.to_homogeneous(),
         model: model.to_homogeneous(),
         model_inverse_transpose: model.inverse().to_homogeneous().transpose(),
@@ -110,19 +116,16 @@ fn main() {
     let intensity = 4.0;
 
     // Convert sRGB color to linear for rendering
-    let color = RGBAf32Pixel {
-        r: 0.1f32.powf(2.2),
-        g: 0.5f32.powf(2.2),
-        b: 0.1f32.powf(2.2),
-        a: 1.0
-    };
+    let color = RGBAf32Color::new(0.1f32.powf(2.2), 0.5f32.powf(2.2), 0.1f32.powf(2.2), 1.0);
 
     // Iterate through available meshes
     for mesh in &meshes {
-        // Begin the rendering of a given mesh, which returns the vertex shader object
-        let vertex_shader = pipeline.render_mesh(mesh.clone());
+        let dimensions = pipeline.framebuffer().dimensions();
 
-        let fragment_shader = vertex_shader.run(|vertex: &Vertex<VertexData>, global_uniforms: &GlobalUniforms| -> ClipVertex<Uniforms> {
+        // Begin the rendering of a given mesh, which returns the vertex shader object
+        let vertex_shader = pipeline.render_mesh(primitive::Triangle, mesh.clone());
+
+        let geometry_shader = vertex_shader.run(|vertex: &Vertex<VertexData>, global_uniforms: &GlobalUniforms| -> ClipVertex<Uniforms> {
             let GlobalUniforms { ref view, ref projection, ref model, ref model_inverse_transpose, .. } = *global_uniforms;
             let VertexData { normal } = vertex.vertex_data;
 
@@ -142,8 +145,11 @@ fn main() {
             })
         });
 
+        let fragment_shader = geometry_shader.clip_primitives().finish((dimensions.width as f32,
+                                                                        dimensions.height as f32));
+
         // Render the vertices as triangles
-        fragment_shader.triangles(|screen_vertex, global_uniforms| {
+        fragment_shader.run(|screen_vertex, global_uniforms| {
             // Get all the uniforms
             let GlobalUniforms { ref camera, .. } = *global_uniforms;
             let Uniforms { position, normal } = screen_vertex.uniforms;
@@ -173,19 +179,21 @@ fn main() {
             let specular = f * NdotH.powf(shininess * 2.0);
 
             // Return the color of the fragment, adjusting for gamma
-            Fragment::Color(RGBAf32Pixel {
-                r: (intensity * (specular + (diffuse * color.r))).powf(1.0 / 2.2),
-                g: (intensity * (specular + (diffuse * color.g))).powf(1.0 / 2.2),
-                b: (intensity * (specular + (diffuse * color.b))).powf(1.0 / 2.2),
-                a: 1.0
-            })
+            Fragment::Color(RGBAf32Color::new(
+                (intensity * (specular + (diffuse * color.x))).powf(1.0 / 2.2),
+                (intensity * (specular + (diffuse * color.y))).powf(1.0 / 2.2),
+                (intensity * (specular + (diffuse * color.z))).powf(1.0 / 2.2),
+                1.0
+            ))
         });
     }
 
+    /*
     println!("Saving to image");
 
     // copy the framebuffer into an image then save it to a file
     let image = pipeline.framebuffer().copy_to_image().unwrap();
 
     image.save("examples/suzanne.png").unwrap();
+    */
 }
