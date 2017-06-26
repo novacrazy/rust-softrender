@@ -11,14 +11,9 @@ use std::path::Path;
 
 use nalgebra::{Point3, Vector4, Vector3, Matrix4};
 
+use softrender::prelude::*;
 use softrender::color::predefined::formats::RGBAf32Color;
-use softrender::geometry::{Dimensions, HasDimensions, ClipVertex};
-use softrender::primitive;
-use softrender::mesh::{Mesh, Vertex};
 use softrender::attachments::predefined::ColorDepthAttachments;
-use softrender::framebuffer::{Framebuffer, RenderBuffer};
-use softrender::pipeline::{Pipeline, PipelineObject};
-use softrender::pipeline::stages::fragment::Fragment;
 
 /// Defines data stored alongside vertex position
 struct VertexData {
@@ -123,7 +118,7 @@ fn main() {
         let dimensions = pipeline.framebuffer().dimensions();
 
         // Begin the rendering of a given mesh, which returns the vertex shader object
-        let vertex_shader = pipeline.render_mesh(primitive::Triangle, mesh.clone());
+        let vertex_shader = pipeline.render_mesh(Triangle, mesh.clone());
 
         let geometry_shader = vertex_shader.run(|vertex: &Vertex<VertexData>, global_uniforms: &GlobalUniforms| -> ClipVertex<Uniforms> {
             let GlobalUniforms { ref view, ref projection, ref model, ref model_inverse_transpose, .. } = *global_uniforms;
