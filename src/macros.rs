@@ -1,10 +1,3 @@
-//! Types, traits and macros for uniform variables
-//!
-//! Currently, the `Interpolate` trait is implemented for `f32` and nalgebra
-//! matrices (including vectors), points, translations, rotations, and Quaternions.
-//!
-//! It can be implemented automatically for your uniforms structures by using the [`declare_uniforms!`](../../macro.declare_uniforms.html) macro.
-
 /// Declares a structure and implements the [`Interpolate`](render/uniform/trait.Interpolate.html) trait for it by delegating the trait to each member.
 ///
 /// So, for example, this:

@@ -72,7 +72,6 @@ pub mod framebuffer;
 pub mod primitive;
 pub mod geometry;
 pub mod interpolate;
-pub mod uniform;
 pub mod clip;
 pub mod texture;
 pub mod pipeline;
@@ -89,4 +88,5 @@ pub use pipeline::{Pipeline, PipelineObject,
                    VertexShader, GeometryShader, FragmentShader,
                    PrimitiveStorage};
 
+include!("macros.rs");
 include!("tuples.rs");
