@@ -1,5 +1,8 @@
+//! Iterator structures for pixelbuffers
+
 use super::{PixelRead, PixelWrite, PixelRef, PixelMut};
 
+/// `PixelBuffer` iterator structure
 pub struct PixelBufferIter<'a, P: 'a> where P: PixelRead {
     pub ( in ::pixels) buffer: &'a P,
     pub ( in ::pixels) position: usize,

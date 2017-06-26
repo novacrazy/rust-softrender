@@ -1,3 +1,5 @@
+//! Rendering stages
+
 pub mod rasterization;
 
 pub mod vertex;

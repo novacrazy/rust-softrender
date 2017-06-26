@@ -1,3 +1,5 @@
+//! Texture handling
+
 use ::error::RenderResult;
 
 use ::color::Color;

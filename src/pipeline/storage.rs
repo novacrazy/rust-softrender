@@ -1,6 +1,7 @@
+//! Storage structures
+
 use ::{ClipVertex, ScreenVertex, PrimitiveRef};
 
-// Internal type for accumulating varying primitives
 #[derive(Clone)]
 pub ( in ::pipeline ) struct SeparablePrimitiveStorage<K> {
     pub points: Vec<ClipVertex<K>>,

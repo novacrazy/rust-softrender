@@ -1,3 +1,5 @@
+//! Primitive type-ids and reference enums
+
 use ::ClipVertex;
 
 /// Defines the kinds of primitives that can be rendered by themselves.

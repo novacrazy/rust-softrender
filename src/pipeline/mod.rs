@@ -1,3 +1,5 @@
+//! The rendering pipeline
+
 use std::sync::Arc;
 use std::marker::PhantomData;
 
@@ -15,8 +17,11 @@ pub use self::storage::PrimitiveStorage;
 
 pub use self::stages::{VertexShader, GeometryShader, FragmentShader};
 
+/// Defines types and methods for pipeline objects
 pub trait PipelineObject {
+    /// The associated framebuffer type for the pipeline
     type Framebuffer: Framebuffer;
+    /// The associated global uniforms type for the pipeline
     type Uniforms: Send + Sync;
 
     /// Returns a reference to the uniforms value
@@ -60,15 +65,20 @@ impl<U, F> PipelineObject for Pipeline<U, F> where U: Send + Sync, F: Framebuffe
 }
 
 impl<U> Pipeline<U, NullFramebuffer> where U: Send + Sync {
-    /// Create a new rendering pipeline instance with the desired framebuffer
+    /// Create a new rendering pipeline instance with a `NullFramebuffer`.
+    ///
+    /// Use `from_framebuffer` or `with_framebuffer` to set the desired framebuffer for rendering.
     pub fn new(uniforms: U) -> Pipeline<U, NullFramebuffer> {
         Pipeline { framebuffer: NullFramebuffer::new(), uniforms }
     }
 
-    pub fn from_framebuffer<F>(uniforms: U, framebuffer: F) -> Pipeline<U, F> where F: Framebuffer {
+    /// Create a new pipeline from the given uniforms and framebuffer
+    pub fn from_framebuffer<F>(framebuffer: F, uniforms: U) -> Pipeline<U, F> where F: Framebuffer {
         Self::new(uniforms).with_framebuffer(framebuffer)
     }
 
+    /// Convert one pipeline into another with the given framebuffer,
+    /// discarding the old framebuffer.
     pub fn with_framebuffer<F>(self, framebuffer: F) -> Pipeline<U, F> where F: Framebuffer {
         let Dimensions { width, height } = framebuffer.dimensions();
 

@@ -1,3 +1,5 @@
+//! Interpolation utilities
+
 use std::ops::{Add, Mul};
 
 /// Describes a type that can be interpolated with barycentric coordinates.
@@ -22,6 +24,7 @@ pub fn barycentric_interpolate<T>(u: f32, ux: T, v: f32, vx: T, w: f32, wx: T) -
     ux * u + vx * v + wx * w
 }
 
+/// Convenience method for linearly interpolating two values
 #[inline]
 pub fn linear_interpolate<T>(t: f32, x1: T, x2: T) -> T where T: Add<Output=T>, T: Mul<f32, Output=T> {
     x1 * (1.0 - t) + x2 * t
