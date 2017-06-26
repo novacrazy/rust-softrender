@@ -2,9 +2,11 @@
 
 use std::sync::Arc;
 use std::marker::PhantomData;
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 
-use ::framebuffer::Framebuffer;
+use ::color::Color;
+use ::color::blend::Blend;
+use ::framebuffer::{Attachments, Framebuffer};
 use ::primitive::Primitive;
 use ::mesh::Mesh;
 use ::geometry::{Dimensions, ScreenVertex, FaceWinding};
@@ -12,6 +14,11 @@ use ::interpolate::Interpolate;
 use ::pipeline::storage::SeparableScreenPrimitiveStorage;
 
 use ::pipeline::PipelineObject;
+
+use ::pipeline::types::{PipelineUniforms, ColorAttachment};
+
+pub const DEFAULT_TILE_SIZE: Dimensions = Dimensions { width: 16, height: 16 };
+
 
 /// Fragment shader stage.
 ///
@@ -39,94 +46,48 @@ pub struct FragmentShader<'a, P: 'a, V, T, K, B> {
     pub ( in ::pipeline) tile_size: Dimensions,
 }
 
-pub const DEFAULT_TILE_SIZE: Dimensions = Dimensions { width: 16, height: 16 };
-
-impl<'a, P: 'a, V, T, K, B> Deref for FragmentShader<'a, P, V, T, K, B> {
-    type Target = P;
-
-    fn deref(&self) -> &P { &*self.pipeline }
-}
-
-/*
-
 /// Fragment returned by the fragment shader, which can either be a color
 /// value for the pixel or a discard flag to skip that fragment altogether.
 #[derive(Debug, Clone, Copy)]
-pub enum Fragment<P> where P: Pixel {
+pub enum Fragment<C> where C: Color {
     /// Discard the fragment altogether, as if it was never there.
     Discard,
     /// Desired color for the pixel
-    Color(P)
+    Color(C)
 }
 
-impl<'a, T, V, U: 'a, K, P, B> Deref for FragmentShader<'a, T, V, U, K, P, B> where T: Primitive,
-                                                                                    P: Pixel,
-                                                                                    B: Blend<P> {
+impl<'a, P: 'a, V, T, K, B> Deref for FragmentShader<'a, P, V, T, K, B>
+    where P: PipelineObject, B: Blend<ColorAttachment<P>> {
     type Target = B;
     fn deref(&self) -> &B { &self.blend }
 }
 
-impl<'a, T, V, U: 'a, K, P, B> DerefMut for FragmentShader<'a, T, V, U, K, P, B> where T: Primitive,
-                                                                                       P: Pixel,
-                                                                                       B: Blend<P> {
+impl<'a, P: 'a, V, T, K, B> DerefMut for FragmentShader<'a, P, V, T, K, B>
+    where P: PipelineObject, B: Blend<ColorAttachment<P>> {
     fn deref_mut(&mut self) -> &mut B { &mut self.blend }
 }
 
-impl<'a, T, V, U, K, P, B> FragmentShader<'a, T, V, U, K, P, B> where T: Primitive,
-                                                                      P: Pixel {
+impl<'a, P: 'a, V, T, K, B> FragmentShader<'a, P, V, T, K, B> {
     /// Cull faces based on winding order. For more information on how and why this works,
-    /// check out the documentation for the [`FaceWinding`](../geometry/enum.FaceWinding.html) enum.
-    #[inline(always)]
+    /// check out the documentation for the [`FaceWinding`](../geometry/winding/enum.FaceWinding.html) enum.
     pub fn cull_faces(&mut self, cull: Option<FaceWinding>) {
         self.cull_faces = cull;
     }
 
     /// Enables drawing antialiased lines for `Line` primitives
-    /// primitives using Xiaolin Wu's algorithm
-    #[inline(always)]
+    /// primitives using Xiaolin Wu's algorithm,
+    /// otherwise Bresenham's Algorithm is used.
     pub fn antialiased_lines(&mut self, enable: bool) {
         self.antialiased_lines = enable;
     }
-}
 
-impl<'a, T, V, U, K, P, O> FragmentShader<'a, T, V, U, K, P, O> where T: Primitive,
-                                                                      P: Pixel {
-    #[must_use]
-    pub fn with_blend<B>(self, blend: B) -> FragmentShader<'a, T, V, U, K, P, B> where B: Blend<P> {
-        FragmentShader {
-            blend: blend,
-            framebuffer: self.framebuffer,
-            uniforms: self.uniforms,
-            mesh: self.mesh,
-            indexed_primitive: PhantomData,
-            indexed_vertices: self.indexed_vertices,
-            generated_primitives: self.generated_primitives,
-            cull_faces: self.cull_faces,
-            antialiased_lines: self.antialiased_lines,
-            tile_size: self.tile_size,
-        }
-    }
-
-    #[must_use]
-    pub fn with_default_blend<B>(self) -> FragmentShader<'a, T, V, U, K, P, B> where B: Blend<P> + Default {
-        self.with_blend(B::default())
-    }
-}
-
-impl<'a, T, V, U: 'a, K, P, B> FragmentShader<'a, T, V, U, K, P, B> where T: Primitive,
-                                                                          V: Send + Sync,
-                                                                          U: Send + Sync,
-                                                                          K: Send + Sync + Interpolate,
-                                                                          P: Pixel, B: Blend<P> {
     /// Duplicates all references to internal state to return a cloned fragment shader,
     /// which can be used to efficiently render the same geometry with different
     /// rasterization methods in quick succession.
     #[must_use]
-    pub fn duplicate<'b>(&'b mut self) -> FragmentShader<'b, T, V, U, K, P, B> where 'a: 'b,
-                                                                                     B: Clone {
+    pub fn duplicate<'b>(&'b mut self) -> FragmentShader<'b, P, V, T, K, B> where 'a: 'b, B: Clone {
         FragmentShader {
-            framebuffer: self.framebuffer,
-            uniforms: self.uniforms,
+            pipeline: self.pipeline,
             mesh: self.mesh.clone(),
             indexed_primitive: PhantomData,
             indexed_vertices: self.indexed_vertices.clone(),
@@ -137,9 +98,40 @@ impl<'a, T, V, U: 'a, K, P, B> FragmentShader<'a, T, V, U, K, P, B> where T: Pri
             tile_size: self.tile_size,
         }
     }
-
-    #[must_use]
-    pub fn run<S>(self, fragment_shader: S) where S: Fn(&ScreenVertex<K>, &U) -> Fragment<P> + Send + Sync {}
 }
 
-*/
+impl<'a, P: 'a, V, T, K, O> FragmentShader<'a, P, V, T, K, O> where P: PipelineObject {
+    #[must_use]
+    pub fn with_blend<B>(self, blend: B) -> FragmentShader<'a, P, V, T, K, B>
+        where B: Blend<ColorAttachment<P>> {
+        FragmentShader {
+            pipeline: self.pipeline,
+            mesh: self.mesh,
+            indexed_primitive: PhantomData,
+            indexed_vertices: self.indexed_vertices,
+            generated_primitives: self.generated_primitives,
+            cull_faces: self.cull_faces,
+            blend: blend,
+            antialiased_lines: self.antialiased_lines,
+            tile_size: self.tile_size,
+        }
+    }
+
+    #[must_use]
+    pub fn with_default_blend<B>(self) -> FragmentShader<'a, P, V, T, K, B>
+        where B: Blend<ColorAttachment<P>> + Default {
+        self.with_blend(B::default())
+    }
+}
+
+impl<'a, P: 'a, V, T, K, B> FragmentShader<'a, P, V, T, K, B>
+    where P: PipelineObject,
+          V: Send + Sync,
+          T: Primitive,
+          K: Send + Sync + Interpolate,
+          B: Blend<ColorAttachment<P>> {
+    pub fn run<S>(self, fragment_shader: S)
+        where S: Fn(&ScreenVertex<K>, &PipelineUniforms<P>) -> Fragment<ColorAttachment<P>> + Send + Sync {
+        unimplemented!()
+    }
+}
