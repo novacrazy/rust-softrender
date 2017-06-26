@@ -1,3 +1,5 @@
+use std::ops::{Add, AddAssign};
+
 use nalgebra::Vector2;
 use nalgebra::coordinates::XY;
 
@@ -64,5 +66,23 @@ impl From<Coordinate> for Vector2<u32> {
     #[inline(always)]
     fn from(coord: Coordinate) -> Vector2<u32> {
         coord.into_vector()
+    }
+}
+
+impl Add for Coordinate {
+    type Output = Coordinate;
+
+    fn add(self, rhs: Coordinate) -> Coordinate {
+        Coordinate {
+            x: self.x + rhs.x,
+            y: self.y + rhs.y,
+        }
+    }
+}
+
+impl AddAssign for Coordinate {
+    fn add_assign(&mut self, rhs: Coordinate) {
+        self.x += rhs.x;
+        self.y += rhs.y;
     }
 }
