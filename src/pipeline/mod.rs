@@ -8,6 +8,7 @@ use ::framebuffer::Framebuffer;
 use ::framebuffer::nullbuffer::NullFramebuffer;
 
 pub mod storage;
+pub mod types;
 pub mod stages;
 
 pub use self::storage::PrimitiveStorage;

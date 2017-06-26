@@ -16,6 +16,8 @@ use ::pipeline::storage::{PrimitiveStorage, SeparablePrimitiveStorage, Separable
 use ::pipeline::{PipelineObject, FragmentShader};
 use ::pipeline::stages::fragment::DEFAULT_TILE_SIZE;
 
+use ::pipeline::types::PipelineUniforms;
+
 /// Geometry shader stage
 ///
 /// The geometry shader can edit and generate new vertices from the output of the vertex shader.
@@ -46,12 +48,6 @@ impl<'a, P: 'a, V, T, K> GeometryShader<'a, P, V, T, K> {
             generated_primitives: self.generated_primitives.clone(),
         }
     }
-}
-
-impl<'a, P: 'a, V, T, K> Deref for GeometryShader<'a, P, V, T, K> {
-    type Target = P;
-
-    fn deref(&self) -> &P { &*self.pipeline }
 }
 
 impl<'a, P: 'a, V, T, K> GeometryShader<'a, P, V, T, K> where P: PipelineObject,
@@ -94,8 +90,8 @@ impl<'a, P: 'a, V, T, K> GeometryShader<'a, P, V, T, K> where P: PipelineObject,
     }
 
     #[must_use]
-    pub fn replace<S>(self, geometry_shader: S) -> Self
-        where S: for<'s, 'p> Fn(PrimitiveStorage<'s, K>, PrimitiveRef<'p, K>, &<P as PipelineObject>::Uniforms) + Send + Sync + 'static {
+    pub fn run<S>(self, geometry_shader: S) -> Self
+        where S: for<'s, 'p> Fn(PrimitiveStorage<'s, K>, PrimitiveRef<'p, K>, &PipelineUniforms<P>) + Send + Sync + 'static {
         let GeometryShader { pipeline, mesh, indexed_vertices, generated_primitives, .. } = self;
 
         let replaced_primitives = {
@@ -157,7 +153,7 @@ impl<'a, P: 'a, V, T, K> GeometryShader<'a, P, V, T, K> where P: PipelineObject,
 
     #[must_use]
     pub fn clip_primitives(self) -> Self where K: Clone + Interpolate {
-        self.replace(|mut storage, primitive, _| {
+        self.run(|mut storage, primitive, _| {
             match primitive {
                 PrimitiveRef::Triangle { a, b, c } => {
                     // We expect most triangles will go unchanged,

@@ -11,6 +11,8 @@ use ::mesh::{Vertex, Mesh};
 use ::interpolate::Interpolate;
 use ::geometry::ClipVertex;
 
+use ::pipeline::types::PipelineUniforms;
+
 /// Vertex shader stage.
 ///
 /// The vertex shader is responsible for transforming all mesh vertices into a form which can be presented on screen (more or less),
@@ -40,12 +42,6 @@ impl<'a, P: 'a, V, T> VertexShader<'a, P, V, T> {
             indexed_primitive: PhantomData,
         }
     }
-}
-
-impl<'a, P: 'a, V, T> Deref for VertexShader<'a, P, V, T> {
-    type Target = P;
-
-    fn deref(&self) -> &P { &*self.pipeline }
 }
 
 impl<'a, P: 'a, V, T> VertexShader<'a, P, V, T> where P: PipelineObject,
@@ -85,7 +81,7 @@ impl<'a, P: 'a, V, T> VertexShader<'a, P, V, T> where P: PipelineObject,
     ///
     /// See the [`full_example`](https://github.com/novacrazy/rust-softrender/tree/master/full_example) project for this in action.
     #[must_use]
-    pub fn run<S, K>(self, vertex_shader: S) -> GeometryShader<'a, P, V, T, K> where S: Fn(&Vertex<V>, &<P as PipelineObject>::Uniforms) -> ClipVertex<K> + Send + Sync,
+    pub fn run<S, K>(self, vertex_shader: S) -> GeometryShader<'a, P, V, T, K> where S: Fn(&Vertex<V>, &PipelineUniforms<P>) -> ClipVertex<K> + Send + Sync,
                                                                                      K: Send + Sync + Interpolate {
         let VertexShader { pipeline, mesh, .. } = self;
 
