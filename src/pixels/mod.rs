@@ -4,12 +4,31 @@ use ::color::Color;
 use ::geometry::{Coordinate, HasDimensions};
 
 pub mod iterator;
+pub mod partial;
 
 pub use self::iterator::PixelBufferIter;
+
+pub use self::partial::{PartialPixelBuffer, PartialPixelBufferRef, PartialPixelBufferMut};
 
 /// Generic buffer type trait, which defines the `Color` type for any pixel in the buffer
 pub trait PixelBuffer: Sized + HasDimensions {
     type Color: Color;
+
+    fn partial_ref(&self, start: Coordinate, end: Coordinate) -> RenderResult<PartialPixelBufferRef<Self>> {
+        if start < end {
+            Ok(PartialPixelBufferRef { parent: self, start, end })
+        } else {
+            throw!(RenderError::InvalidPixelCoordinate);
+        }
+    }
+
+    fn partial_mut(&mut self, start: Coordinate, end: Coordinate) -> RenderResult<PartialPixelBufferMut<Self>> {
+        if start < end {
+            Ok(PartialPixelBufferMut { parent: self, start, end })
+        } else {
+            throw!(RenderError::InvalidPixelCoordinate);
+        }
+    }
 }
 
 /// Defines methods for reading raw pixel values.
