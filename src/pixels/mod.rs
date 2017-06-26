@@ -14,6 +14,10 @@ pub use self::partial::{PartialPixelBuffer, PartialPixelBufferRef, PartialPixelB
 pub trait PixelBuffer: Sized + HasDimensions {
     type Color: Color;
 
+    /// Returns a partial 2D "slice" of a pixelbuffer with most of the same properties.
+    ///
+    /// Partial pixelbuffers are slower than direct usage of their parent pixelbuffer as every pixel access requires
+    /// computing the offset to the parent pixelbuffer.
     fn partial_ref(&self, start: Coordinate, end: Coordinate) -> RenderResult<PartialPixelBufferRef<Self>> {
         if start < end {
             Ok(PartialPixelBufferRef { parent: self, start, end })
@@ -22,6 +26,10 @@ pub trait PixelBuffer: Sized + HasDimensions {
         }
     }
 
+    /// Returns a mutable partial 2D "slice" of a pixelbuffer with most of the same properties.
+    ///
+    /// Partial pixelbuffers are slower than direct usage of their parent pixelbuffer as every pixel access requires
+    /// computing the offset to the parent pixelbuffer.
     fn partial_mut(&mut self, start: Coordinate, end: Coordinate) -> RenderResult<PartialPixelBufferMut<Self>> {
         if start < end {
             Ok(PartialPixelBufferMut { parent: self, start, end })

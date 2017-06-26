@@ -1,13 +1,20 @@
+//! Partial PixelBuffers
+
 use ::error::{RenderResult, RenderError};
 use ::geometry::{Dimensions, HasDimensions, Coordinate};
 
 use super::{PixelBuffer, PixelRead, PixelWrite, PixelRef, PixelMut};
 
+/// Common properties and methods for `PartialPixelBuffer` types
 pub trait PartialPixelBuffer: PixelBuffer {
+    /// The parent pixelbuffer type
     type PixelBuffer;
 
+    /// Relative to the parent pixelbuffer, the starting coordinate of the partial pixelbuffer
     fn start(&self) -> Coordinate;
+    /// Relative to the parent pixelbuffer, the ending coordinate of the partial pixelbuffer
     fn end(&self) -> Coordinate;
+    /// Reference to the parent pixelbuffer
     fn parent(&self) -> &Self::PixelBuffer;
 }
 
