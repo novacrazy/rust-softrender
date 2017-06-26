@@ -66,24 +66,18 @@ impl<'a, P: 'a> PartialPixelBuffer for PartialPixelBufferMut<'a, P> where P: Pix
 
 impl<'a, P: 'a> HasDimensions for PartialPixelBufferRef<'a, P> {
     fn dimensions(&self) -> Dimensions {
-        let Coordinate { x: x1, y: y1 } = self.start;
-        let Coordinate { x: x2, y: y2 } = self.end;
-
         Dimensions {
-            width: x2 - x1,
-            height: y2 - y1
+            width: self.end.x - self.start.x,
+            height: self.end.y - self.start.y
         }
     }
 }
 
 impl<'a, P: 'a> HasDimensions for PartialPixelBufferMut<'a, P> {
     fn dimensions(&self) -> Dimensions {
-        let Coordinate { x: x1, y: y1 } = self.start;
-        let Coordinate { x: x2, y: y2 } = self.end;
-
         Dimensions {
-            width: x2 - x1,
-            height: y2 - y1
+            width: self.end.x - self.start.x,
+            height: self.end.y - self.start.y
         }
     }
 }
