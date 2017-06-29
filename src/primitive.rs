@@ -20,7 +20,7 @@ pub trait Primitive {
     /// Creates a `PrimitiveRef` from some indexed vertices.
     ///
     /// This are used internally.
-    fn create_ref_from_indexed_vertices<'p, K>(vertices: &'p [ClipVertex<K>], indices: &[u32]) -> PrimitiveRef<'p, K>;
+    fn create_ref_from_indexed_vertices<'p, K>(vertices: &'p [ClipVertex<K>], indices: &[usize]) -> PrimitiveRef<'p, K>;
 }
 
 /// Holds references to primitive vertices for each primitive type
@@ -81,7 +81,7 @@ impl Primitive for Point {
         PrimitiveMut::Point(&mut vertices[0])
     }
 
-    fn create_ref_from_indexed_vertices<'p, K>(vertices: &'p [ClipVertex<K>], indices: &[u32]) -> PrimitiveRef<'p, K> {
+    fn create_ref_from_indexed_vertices<'p, K>(vertices: &'p [ClipVertex<K>], indices: &[usize]) -> PrimitiveRef<'p, K> {
         debug_assert_eq!(indices.len(), Self::num_vertices());
 
         PrimitiveRef::Point(&vertices[indices[0] as usize])
@@ -106,7 +106,7 @@ impl Primitive for Line {
         PrimitiveMut::Line { start: &mut start[0], end: &mut end[0] }
     }
 
-    fn create_ref_from_indexed_vertices<'p, K>(vertices: &'p [ClipVertex<K>], indices: &[u32]) -> PrimitiveRef<'p, K> {
+    fn create_ref_from_indexed_vertices<'p, K>(vertices: &'p [ClipVertex<K>], indices: &[usize]) -> PrimitiveRef<'p, K> {
         debug_assert_eq!(indices.len(), Self::num_vertices());
 
         PrimitiveRef::Line {
@@ -139,7 +139,7 @@ impl Primitive for Triangle {
         PrimitiveMut::Triangle { a: &mut a[0], b: &mut b[0], c: &mut c[0] }
     }
 
-    fn create_ref_from_indexed_vertices<'p, K>(vertices: &'p [ClipVertex<K>], indices: &[u32]) -> PrimitiveRef<'p, K> {
+    fn create_ref_from_indexed_vertices<'p, K>(vertices: &'p [ClipVertex<K>], indices: &[usize]) -> PrimitiveRef<'p, K> {
         debug_assert_eq!(indices.len(), Self::num_vertices());
 
         PrimitiveRef::Triangle {

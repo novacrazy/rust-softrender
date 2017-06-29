@@ -41,7 +41,7 @@ pub struct Mesh<V> {
     /// ```
     ///
     /// Note that both of those triangles go in a clockwise direction from vertex to vertex.
-    pub indices: Vec<u32>,
+    pub indices: Vec<usize>,
     /// Vertices with their vertex data
     pub vertices: Vec<Vertex<V>>,
 }
