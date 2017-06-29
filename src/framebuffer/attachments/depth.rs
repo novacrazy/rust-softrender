@@ -1,6 +1,6 @@
 //! Depth Buffer attachment definition
 
-use num_traits::{NumCast, ToPrimitive};
+use num_traits::{NumCast, Bounded, ToPrimitive};
 
 use nalgebra::Scalar;
 
@@ -28,7 +28,7 @@ macro_rules! impl_depth_primitives {
         $(
             impl Depth for $t {
                 #[inline(always)]
-                fn far() -> $t { <$t>::min_value() }
+                fn far() -> $t { <$t as Bounded>::min_value() }
 
                 #[inline(always)]
                 fn from_scalar<N: Scalar + ToPrimitive>(n: N) -> Self {
