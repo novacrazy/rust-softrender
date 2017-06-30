@@ -1,5 +1,6 @@
 //! Primitive type-ids and reference enums
 
+use ::numeric::FloatScalar;
 use ::geometry::ClipVertex;
 
 /// Defines the kinds of primitives that can be rendered by themselves.
@@ -10,46 +11,46 @@ pub trait Primitive {
     /// Creates a `PrimitiveRef` from some vertices
     ///
     /// This is used internally.
-    fn create_ref_from_vertices<'p, K>(vertices: &'p [ClipVertex<K>]) -> PrimitiveRef<'p, K>;
+    fn create_ref_from_vertices<'p, N: FloatScalar, K>(vertices: &'p [ClipVertex<N, K>]) -> PrimitiveRef<'p, N, K>;
 
     /// Creates a 'PrimitiveMut` from some vertices
     ///
     /// This is used internally.
-    fn create_mut_from_vertices<'p, K>(vertices: &'p mut [ClipVertex<K>]) -> PrimitiveMut<'p, K>;
+    fn create_mut_from_vertices<'p, N: FloatScalar, K>(vertices: &'p mut [ClipVertex<N, K>]) -> PrimitiveMut<'p, N, K>;
 
     /// Creates a `PrimitiveRef` from some indexed vertices.
     ///
     /// This are used internally.
-    fn create_ref_from_indexed_vertices<'p, K>(vertices: &'p [ClipVertex<K>], indices: &[usize]) -> PrimitiveRef<'p, K>;
+    fn create_ref_from_indexed_vertices<'p, N: FloatScalar, K>(vertices: &'p [ClipVertex<N, K>], indices: &[usize]) -> PrimitiveRef<'p, N, K>;
 }
 
 /// Holds references to primitive vertices for each primitive type
 #[derive(Debug, Clone, Copy)]
-pub enum PrimitiveRef<'p, K: 'p> {
-    Point(&'p ClipVertex<K>),
+pub enum PrimitiveRef<'p, N: FloatScalar, K: 'p> {
+    Point(&'p ClipVertex<N, K>),
     Line {
-        start: &'p ClipVertex<K>,
-        end: &'p ClipVertex<K>,
+        start: &'p ClipVertex<N, K>,
+        end: &'p ClipVertex<N, K>,
     },
     Triangle {
-        a: &'p ClipVertex<K>,
-        b: &'p ClipVertex<K>,
-        c: &'p ClipVertex<K>,
+        a: &'p ClipVertex<N, K>,
+        b: &'p ClipVertex<N, K>,
+        c: &'p ClipVertex<N, K>,
     }
 }
 
 /// Holds mutable references to primitive vertices for each primitive type
 #[derive(Debug)]
-pub enum PrimitiveMut<'p, K: 'p> {
-    Point(&'p mut ClipVertex<K>),
+pub enum PrimitiveMut<'p, N: FloatScalar, K: 'p> {
+    Point(&'p mut ClipVertex<N, K>),
     Line {
-        start: &'p mut ClipVertex<K>,
-        end: &'p mut ClipVertex<K>,
+        start: &'p mut ClipVertex<N, K>,
+        end: &'p mut ClipVertex<N, K>,
     },
     Triangle {
-        a: &'p mut ClipVertex<K>,
-        b: &'p mut ClipVertex<K>,
-        c: &'p mut ClipVertex<K>,
+        a: &'p mut ClipVertex<N, K>,
+        b: &'p mut ClipVertex<N, K>,
+        c: &'p mut ClipVertex<N, K>,
     }
 }
 
@@ -69,19 +70,19 @@ impl Primitive for Point {
     #[inline(always)]
     fn num_vertices() -> usize { 1 }
 
-    fn create_ref_from_vertices<'p, K>(vertices: &'p [ClipVertex<K>]) -> PrimitiveRef<'p, K> {
+    fn create_ref_from_vertices<'p, N: FloatScalar, K>(vertices: &'p [ClipVertex<N, K>]) -> PrimitiveRef<'p, N, K> {
         debug_assert_eq!(vertices.len(), Self::num_vertices());
 
         PrimitiveRef::Point(&vertices[0])
     }
 
-    fn create_mut_from_vertices<'p, K>(vertices: &'p mut [ClipVertex<K>]) -> PrimitiveMut<'p, K> {
+    fn create_mut_from_vertices<'p, N: FloatScalar, K>(vertices: &'p mut [ClipVertex<N, K>]) -> PrimitiveMut<'p, N, K> {
         debug_assert_eq!(vertices.len(), Self::num_vertices());
 
         PrimitiveMut::Point(&mut vertices[0])
     }
 
-    fn create_ref_from_indexed_vertices<'p, K>(vertices: &'p [ClipVertex<K>], indices: &[usize]) -> PrimitiveRef<'p, K> {
+    fn create_ref_from_indexed_vertices<'p, N: FloatScalar, K>(vertices: &'p [ClipVertex<N, K>], indices: &[usize]) -> PrimitiveRef<'p, N, K> {
         debug_assert_eq!(indices.len(), Self::num_vertices());
 
         PrimitiveRef::Point(&vertices[indices[0] as usize])
@@ -92,13 +93,13 @@ impl Primitive for Line {
     #[inline(always)]
     fn num_vertices() -> usize { 2 }
 
-    fn create_ref_from_vertices<'p, K>(vertices: &'p [ClipVertex<K>]) -> PrimitiveRef<'p, K> {
+    fn create_ref_from_vertices<'p, N: FloatScalar, K>(vertices: &'p [ClipVertex<N, K>]) -> PrimitiveRef<'p, N, K> {
         debug_assert_eq!(vertices.len(), Self::num_vertices());
 
         PrimitiveRef::Line { start: &vertices[0], end: &vertices[1] }
     }
 
-    fn create_mut_from_vertices<'p, K>(vertices: &'p mut [ClipVertex<K>]) -> PrimitiveMut<'p, K> {
+    fn create_mut_from_vertices<'p, N: FloatScalar, K>(vertices: &'p mut [ClipVertex<N, K>]) -> PrimitiveMut<'p, N, K> {
         debug_assert_eq!(vertices.len(), Self::num_vertices());
 
         let (mut start, mut end) = vertices.split_at_mut(1);
@@ -106,7 +107,7 @@ impl Primitive for Line {
         PrimitiveMut::Line { start: &mut start[0], end: &mut end[0] }
     }
 
-    fn create_ref_from_indexed_vertices<'p, K>(vertices: &'p [ClipVertex<K>], indices: &[usize]) -> PrimitiveRef<'p, K> {
+    fn create_ref_from_indexed_vertices<'p, N: FloatScalar, K>(vertices: &'p [ClipVertex<N, K>], indices: &[usize]) -> PrimitiveRef<'p, N, K> {
         debug_assert_eq!(indices.len(), Self::num_vertices());
 
         PrimitiveRef::Line {
@@ -120,7 +121,7 @@ impl Primitive for Triangle {
     #[inline(always)]
     fn num_vertices() -> usize { 3 }
 
-    fn create_ref_from_vertices<'p, K>(vertices: &'p [ClipVertex<K>]) -> PrimitiveRef<'p, K> {
+    fn create_ref_from_vertices<'p, N: FloatScalar, K>(vertices: &'p [ClipVertex<N, K>]) -> PrimitiveRef<'p, N, K> {
         debug_assert_eq!(vertices.len(), Self::num_vertices());
 
         PrimitiveRef::Triangle {
@@ -130,7 +131,7 @@ impl Primitive for Triangle {
         }
     }
 
-    fn create_mut_from_vertices<'p, K>(vertices: &'p mut [ClipVertex<K>]) -> PrimitiveMut<'p, K> {
+    fn create_mut_from_vertices<'p, N: FloatScalar, K>(vertices: &'p mut [ClipVertex<N, K>]) -> PrimitiveMut<'p, N, K> {
         debug_assert_eq!(vertices.len(), Self::num_vertices());
 
         let (mut a, mut bc) = vertices.split_at_mut(1);
@@ -139,7 +140,7 @@ impl Primitive for Triangle {
         PrimitiveMut::Triangle { a: &mut a[0], b: &mut b[0], c: &mut c[0] }
     }
 
-    fn create_ref_from_indexed_vertices<'p, K>(vertices: &'p [ClipVertex<K>], indices: &[usize]) -> PrimitiveRef<'p, K> {
+    fn create_ref_from_indexed_vertices<'p, N: FloatScalar, K>(vertices: &'p [ClipVertex<N, K>], indices: &[usize]) -> PrimitiveRef<'p, N, K> {
         debug_assert_eq!(indices.len(), Self::num_vertices());
 
         PrimitiveRef::Triangle {
