@@ -1,8 +1,8 @@
 //! Depth Buffer attachment definition
 
-use num_traits::{NumCast, Bounded, ToPrimitive};
+use num_traits::{NumCast, Bounded};
 
-use nalgebra::Scalar;
+use ::numeric::FloatScalar;
 
 /// Defines a depth buffer attachment.
 ///
@@ -12,7 +12,7 @@ pub trait Depth: super::Attachment + PartialOrd {
     fn far() -> Self;
 
     /// Create the depth value from some scalar value, as derived from the vertex data.
-    fn from_scalar<N: Scalar + ToPrimitive>(n: N) -> Self;
+    fn from_scalar<N: FloatScalar>(n: N) -> Self;
 }
 
 impl Depth for () {
@@ -20,7 +20,7 @@ impl Depth for () {
     fn far() -> () { () }
 
     #[inline(always)]
-    fn from_scalar<N: Scalar + ToPrimitive>(_: N) -> () { () }
+    fn from_scalar<N: FloatScalar>(_: N) -> () { () }
 }
 
 macro_rules! impl_depth_primitives {
@@ -31,7 +31,7 @@ macro_rules! impl_depth_primitives {
                 fn far() -> $t { <$t as Bounded>::min_value() }
 
                 #[inline(always)]
-                fn from_scalar<N: Scalar + ToPrimitive>(n: N) -> Self {
+                fn from_scalar<N: FloatScalar>(n: N) -> Self {
                     <$t as NumCast>::from(n).expect("Invalid Cast")
                 }
             }
