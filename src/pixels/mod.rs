@@ -50,7 +50,7 @@ pub trait PixelRead: PixelBuffer {
     /// Get a "reference" to the pixel at the given coordinate.
     ///
     /// Throws `RenderError::InvalidPixelCoordinate` on invalid pixel coordinates.
-    fn pixel_ref<'a>(&'a self, coord: Coordinate) -> RenderResult<PixelRef<'a, Self>> {
+    fn pixel_ref(&self, coord: Coordinate) -> RenderResult<PixelRef<Self>> {
         let dim = self.dimensions();
 
         if dim.in_bounds(coord) {
@@ -64,7 +64,7 @@ pub trait PixelRead: PixelBuffer {
     ///
     /// However, certain framebuffers or pixelbuffers may provide their
     /// own iterators for even more efficient access.
-    fn pixel_iter<'a>(&'a self) -> PixelBufferIter<'a, Self> {
+    fn pixel_iter(&self) -> PixelBufferIter<Self> {
         PixelBufferIter {
             buffer: self,
             position: 0,
@@ -84,7 +84,7 @@ pub trait PixelWrite: PixelRead {
     /// Get a mutable "reference" to the pixel at the given coordinate.
     ///
     /// Throws `RenderError::InvalidPixelCoordinate` on invalid pixel coordinates.
-    fn pixel_mut<'a>(&'a mut self, coord: Coordinate) -> RenderResult<PixelMut<'a, Self>> {
+    fn pixel_mut(&mut self, coord: Coordinate) -> RenderResult<PixelMut<Self>> {
         let dim = self.dimensions();
 
         if dim.in_bounds(coord) {
