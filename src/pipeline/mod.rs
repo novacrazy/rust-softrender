@@ -3,7 +3,7 @@
 use std::sync::Arc;
 use std::marker::PhantomData;
 
-use ::mesh::Mesh;
+use ::mesh::{Vertex, Mesh};
 use ::primitive::Primitive;
 use ::geometry::Dimensions;
 use ::framebuffer::Framebuffer;
@@ -96,7 +96,7 @@ impl<U, F> Pipeline<U, F> where Self: PipelineObject {
     /// Start the shading pipeline for a given mesh
     #[must_use]
     pub fn render_mesh<T, V>(&mut self, primitive: T, mesh: Arc<Mesh<V>>) -> VertexShader<Self, V, T> where T: Primitive,
-                                                                                                            V: Send + Sync {
+                                                                                                            V: Vertex {
         // We only needed the type information,
         // so just throw away the empty object passed in
         drop(primitive);

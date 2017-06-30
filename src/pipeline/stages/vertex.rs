@@ -24,13 +24,13 @@ use ::pipeline::types::PipelineUniforms;
 /// The vertex shader holds a reference to the pipeline framebuffer and global uniforms,
 /// and for the given mesh given to it when created.
 /// These cannot be modified while the vertex shader exists.
-pub struct VertexShader<'a, P: 'a, V, T> {
+pub struct VertexShader<'a, P: 'a, V: Vertex, T> {
     pub ( in ::pipeline) pipeline: &'a mut P,
     pub ( in ::pipeline) mesh: Arc<Mesh<V>>,
     pub ( in ::pipeline) indexed_primitive: PhantomData<T>,
 }
 
-impl<'a, P: 'a, V, T> VertexShader<'a, P, V, T> {
+impl<'a, P: 'a, V, T> VertexShader<'a, P, V, T> where V: Vertex {
     /// Duplicates all references to internal state to return a cloned vertex shader,
     /// though since the vertex shader itself has very little internal state at this point,
     /// it's not that useful.
@@ -45,7 +45,7 @@ impl<'a, P: 'a, V, T> VertexShader<'a, P, V, T> {
 }
 
 impl<'a, P: 'a, V, T> VertexShader<'a, P, V, T> where P: PipelineObject,
-                                                      V: Send + Sync,
+                                                      V: Vertex,
                                                       T: Primitive {
     /// Executes the vertex shader on every vertex in the mesh,
     /// (hopefully) returning a `ClipVertex` with the transformed vertex in clip-space
@@ -81,7 +81,7 @@ impl<'a, P: 'a, V, T> VertexShader<'a, P, V, T> where P: PipelineObject,
     ///
     /// See the [`full_example`](https://github.com/novacrazy/rust-softrender/tree/master/full_example) project for this in action.
     #[must_use]
-    pub fn run<S, K>(self, vertex_shader: S) -> GeometryShader<'a, P, V, T, K> where S: Fn(&Vertex<V>, &PipelineUniforms<P>) -> ClipVertex<K> + Send + Sync,
+    pub fn run<S, K>(self, vertex_shader: S) -> GeometryShader<'a, P, V, T, K> where S: Fn(&V, &PipelineUniforms<P>) -> ClipVertex<V::Scalar, K> + Send + Sync,
                                                                                      K: Send + Sync + Interpolate {
         let VertexShader { pipeline, mesh, .. } = self;
 

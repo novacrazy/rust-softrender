@@ -8,9 +8,8 @@ use rayon::prelude::*;
 use smallvec::SmallVec;
 
 use ::primitive::{Primitive, PrimitiveRef, Point, Line, Triangle};
-use ::mesh::Mesh;
-use ::clip::ALL_CLIPPING_PLANES;
-use ::geometry::ClipVertex;
+use ::mesh::{Vertex, Mesh};
+use ::geometry::{ClipVertex, ALL_CLIPPING_PLANES};
 use ::interpolate::Interpolate;
 use ::pipeline::storage::{PrimitiveStorage, SeparablePrimitiveStorage, SeparableScreenPrimitiveStorage};
 use ::pipeline::{PipelineObject, FragmentShader};
@@ -26,15 +25,15 @@ use ::pipeline::types::PipelineUniforms;
 /// and geometry visualisations like normal vector lines.
 ///
 /// The geometry shader can be ran multiple times.
-pub struct GeometryShader<'a, P: 'a, V, T, K> {
+pub struct GeometryShader<'a, P: 'a, V: Vertex, T, K> {
     pub ( in ::pipeline) pipeline: &'a mut P,
     pub ( in ::pipeline) mesh: Arc<Mesh<V>>,
     pub ( in ::pipeline) indexed_primitive: PhantomData<T>,
-    pub ( in ::pipeline) indexed_vertices: Option<Vec<ClipVertex<K>>>,
-    pub ( in ::pipeline) generated_primitives: SeparablePrimitiveStorage<K>,
+    pub ( in ::pipeline) indexed_vertices: Option<Vec<ClipVertex<V::Scalar, K>>>,
+    pub ( in ::pipeline) generated_primitives: SeparablePrimitiveStorage<V::Scalar, K>,
 }
 
-impl<'a, P: 'a, V, T, K> GeometryShader<'a, P, V, T, K> {
+impl<'a, P: 'a, V, T, K> GeometryShader<'a, P, V, T, K> where V: Vertex {
     /// Duplicate the geometry shader, and copies any processed geometry.
     ///
     /// Geometry are not synced between duplicated geometry shaders.
@@ -51,11 +50,11 @@ impl<'a, P: 'a, V, T, K> GeometryShader<'a, P, V, T, K> {
 }
 
 impl<'a, P: 'a, V, T, K> GeometryShader<'a, P, V, T, K> where P: PipelineObject,
-                                                              V: Send + Sync,
+                                                              V: Vertex,
                                                               T: Primitive,
                                                               K: Send + Sync + Interpolate {
     #[must_use]
-    pub fn finish(self, viewport: (f32, f32)) -> FragmentShader<'a, P, V, T, K, ()> {
+    pub fn finish(self, viewport: (V::Scalar, V::Scalar)) -> FragmentShader<'a, P, V, T, K, ()> {
         let GeometryShader { pipeline, mesh, indexed_vertices, generated_primitives, .. } = self;
 
         let SeparablePrimitiveStorage { points, lines, tris } = generated_primitives;
@@ -91,7 +90,7 @@ impl<'a, P: 'a, V, T, K> GeometryShader<'a, P, V, T, K> where P: PipelineObject,
 
     #[must_use]
     pub fn run<S>(self, geometry_shader: S) -> Self
-        where S: for<'s, 'p> Fn(PrimitiveStorage<'s, K>, PrimitiveRef<'p, K>, &PipelineUniforms<P>) + Send + Sync + 'static {
+        where S: for<'s, 'p> Fn(PrimitiveStorage<'s, V::Scalar, K>, PrimitiveRef<'p, V::Scalar, K>, &PipelineUniforms<P>) + Send + Sync + 'static {
         let GeometryShader { pipeline, mesh, indexed_vertices, generated_primitives, .. } = self;
 
         let replaced_primitives = {
@@ -108,16 +107,16 @@ impl<'a, P: 'a, V, T, K> GeometryShader<'a, P, V, T, K> where P: PipelineObject,
             let generated_primitives = points.chain(lines).chain(tris);
 
             // Create fold() closure
-            let folder = |mut storage: SeparablePrimitiveStorage<K>,
-                          primitive: PrimitiveRef<K>| {
+            let folder = |mut storage: SeparablePrimitiveStorage<V::Scalar, K>,
+                          primitive: PrimitiveRef<V::Scalar, K>| {
                 // Run the geometry shader here
                 geometry_shader(PrimitiveStorage { inner: &mut storage }, primitive, uniforms);
                 storage
             };
 
             // Create reduce() closure
-            let reducer = |mut storage_a: SeparablePrimitiveStorage<K>,
-                           mut storage_b: SeparablePrimitiveStorage<K>| {
+            let reducer = |mut storage_a: SeparablePrimitiveStorage<V::Scalar, K>,
+                           mut storage_b: SeparablePrimitiveStorage<V::Scalar, K>| {
                 storage_a.append(&mut storage_b);
                 storage_a
             };
