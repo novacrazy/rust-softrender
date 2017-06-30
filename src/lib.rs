@@ -63,7 +63,7 @@ extern crate smallvec;
 extern crate trace_error;
 
 pub mod error;
-pub mod utils;
+pub mod numeric;
 pub mod behavior;
 pub mod color;
 pub mod pixels;
@@ -71,14 +71,13 @@ pub mod mesh;
 pub mod framebuffer;
 pub mod primitive;
 pub mod geometry;
-pub mod interpolate;
-pub mod clip;
 pub mod texture;
 pub mod pipeline;
 
 #[cfg(feature = "image_compat")]
 pub mod image;
 
+pub use numeric::interpolate;
 pub use framebuffer::attachments;
 
 pub mod prelude {
