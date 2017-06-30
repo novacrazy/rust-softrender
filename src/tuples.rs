@@ -1,3 +1,5 @@
+use num_traits::Float;
+
 macro_rules! tuple_impls {
     ($(
         $Tuple:ident {
@@ -26,13 +28,13 @@ macro_rules! tuple_impls {
             }
 
             impl<$($T),+> $crate::interpolate::Interpolate for ($($T,)+) where $($T: $crate::interpolate::Interpolate,)+ {
-                fn barycentric_interpolate(u: f32, ux: &Self, v: f32, vx: &Self, w: f32, wx: &Self) -> Self{
+                fn barycentric_interpolate<N: Float>(u: N, ux: &Self, v: N, vx: &Self, w: N, wx: &Self) -> Self{
                     ($($crate::interpolate::Interpolate::barycentric_interpolate(u, &ux.$idx,
                                                                     v, &vx.$idx,
                                                                     w, &wx.$idx),)+)
                 }
 
-                fn linear_interpolate(t: f32, x1: &Self, x2: &Self) -> Self {
+                fn linear_interpolate<N: Float>(t: N, x1: &Self, x2: &Self) -> Self {
                     ($($crate::interpolate::Interpolate::linear_interpolate(t, &x1.$idx, &x2.$idx),)+)
                 }
             }

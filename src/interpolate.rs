@@ -2,6 +2,8 @@
 
 use std::ops::{Add, Mul};
 
+use num_traits::{Float, NumCast};
+
 /// Describes a type that can be interpolated with barycentric coordinates.
 ///
 /// This is required for any rasterization to occur.
@@ -12,43 +14,54 @@ use std::ops::{Add, Mul};
 /// which for any collection of uniforms for which `Interpolate` is implemented, will delegate `Interpolate::barycentric_interpolate` to each member.
 pub trait Interpolate {
     /// Interpolate the three values with their corresponding barycentric coordinate weight
-    fn barycentric_interpolate(u: f32, x1: &Self, v: f32, x2: &Self, w: f32, x3: &Self) -> Self;
+    fn barycentric_interpolate<R: Float>(u: R, x1: &Self, v: R, x2: &Self, w: R, x3: &Self) -> Self;
 
     /// Simple linear interpolation
-    fn linear_interpolate(t: f32, x1: &Self, x2: &Self) -> Self;
+    fn linear_interpolate<R: Float>(t: R, x1: &Self, x2: &Self) -> Self;
 }
 
 /// Convenience method for interpolating three values with barycentric coordinates.
 #[inline]
-pub fn barycentric_interpolate<T>(u: f32, ux: T, v: f32, vx: T, w: f32, wx: T) -> T where T: Add<Output=T> + Mul<f32, Output=T> {
+pub fn barycentric_interpolate<R: Float, T>(u: R, ux: T, v: R, vx: T, w: R, wx: T) -> T where T: Add<Output=T> + Mul<R, Output=T> {
     ux * u + vx * v + wx * w
 }
 
 /// Convenience method for linearly interpolating two values
 #[inline]
-pub fn linear_interpolate<T>(t: f32, x1: T, x2: T) -> T where T: Add<Output=T>, T: Mul<f32, Output=T> {
-    x1 * (1.0 - t) + x2 * t
+pub fn linear_interpolate<R: Float, T>(t: R, x1: T, x2: T) -> T where T: Add<Output=T>, T: Mul<R, Output=T> {
+    x1 * (R::one() - t) + x2 * t
 }
 
 impl Interpolate for () {
     #[inline(always)]
-    fn barycentric_interpolate(_: f32, _: &Self, _: f32, _: &Self, _: f32, _: &Self) -> Self { () }
+    fn barycentric_interpolate<R: Float>(_: R, _: &Self, _: R, _: &Self, _: R, _: &Self) -> Self { () }
 
     #[inline(always)]
-    fn linear_interpolate(_: f32, _: &Self, _: &Self) -> Self { () }
+    fn linear_interpolate<R: Float>(_: R, _: &Self, _: &Self) -> Self { () }
 }
 
-impl Interpolate for f32 {
-    #[inline(always)]
-    fn barycentric_interpolate(u: f32, ux: &Self, v: f32, vx: &Self, w: f32, wx: &Self) -> Self {
-        ux * u + vx * v + wx * w
-    }
+macro_rules! impl_primitive_interpolate {
+    ($($t:ty),+) => {
+        $(
+            impl Interpolate for $t {
+                #[inline(always)]
+                fn barycentric_interpolate<R: Float>(u: R, ux: &$t, v: R, vx: &$t, w: R, wx: &$t) -> $t {
+                    <$t as NumCast>::from(R::from(*ux).unwrap() * u +
+                                          R::from(*vx).unwrap() * v +
+                                          R::from(*wx).unwrap() * w).unwrap()
+                }
 
-    #[inline(always)]
-    fn linear_interpolate(t: f32, x1: &Self, x2: &Self) -> Self {
-        (1.0 - t) * x1 + t * x2
+                #[inline(always)]
+                fn linear_interpolate<R: Float>(t: R, x1: &$t, x2: &$t) -> $t {
+                     <$t as NumCast>::from((R::one() - t) * R::from(*x1).unwrap() +
+                                                       t  * R::from(*x2).unwrap()).unwrap()
+                }
+            }
+        )+
     }
 }
+
+impl_primitive_interpolate!(i8, i16, i32, i64, u8, u16, u32, u64, isize, usize, f32, f64);
 
 use alga::general::Real;
 
@@ -63,7 +76,7 @@ impl<N, D, S> Interpolate for PointBase<N, D, S> where N: Scalar,
                                                        S: Storage<N, D, U1>,
                                                        Matrix<N, D, U1, S>: Interpolate {
     #[inline]
-    fn barycentric_interpolate(u: f32, ux: &Self, v: f32, vx: &Self, w: f32, wx: &Self) -> Self {
+    fn barycentric_interpolate<R: Float>(u: R, ux: &Self, v: R, vx: &Self, w: R, wx: &Self) -> Self {
         PointBase {
             coords: Interpolate::barycentric_interpolate(u, &ux.coords,
                                                          v, &vx.coords,
@@ -72,7 +85,7 @@ impl<N, D, S> Interpolate for PointBase<N, D, S> where N: Scalar,
     }
 
     #[inline]
-    fn linear_interpolate(t: f32, x1: &Self, x2: &Self) -> Self {
+    fn linear_interpolate<R: Float>(t: R, x1: &Self, x2: &Self) -> Self {
         PointBase {
             coords: Interpolate::linear_interpolate(t, &x1.coords, &x2.coords)
         }
@@ -83,7 +96,7 @@ impl<N, S> Interpolate for QuaternionBase<N, S> where N: Real,
                                                       S: Storage<N, U4, U1>,
                                                       Matrix<N, U4, U1, S>: Interpolate {
     #[inline]
-    fn barycentric_interpolate(u: f32, ux: &Self, v: f32, vx: &Self, w: f32, wx: &Self) -> Self {
+    fn barycentric_interpolate<R: Float>(u: R, ux: &Self, v: R, vx: &Self, w: R, wx: &Self) -> Self {
         QuaternionBase {
             coords: Interpolate::barycentric_interpolate(u, &ux.coords,
                                                          v, &vx.coords,
@@ -92,7 +105,7 @@ impl<N, S> Interpolate for QuaternionBase<N, S> where N: Real,
     }
 
     #[inline]
-    fn linear_interpolate(t: f32, x1: &Self, x2: &Self) -> Self {
+    fn linear_interpolate<R: Float>(t: R, x1: &Self, x2: &Self) -> Self {
         QuaternionBase {
             coords: Interpolate::linear_interpolate(t, &x1.coords, &x2.coords)
         }
@@ -102,7 +115,7 @@ impl<N, S> Interpolate for QuaternionBase<N, S> where N: Real,
 impl<N, D: DimName, S> Interpolate for TranslationBase<N, D, S> where N: Scalar,
                                                                       Matrix<N, D, U1, S>: Interpolate {
     #[inline]
-    fn barycentric_interpolate(u: f32, ux: &Self, v: f32, vx: &Self, w: f32, wx: &Self) -> Self {
+    fn barycentric_interpolate<R: Float>(u: R, ux: &Self, v: R, vx: &Self, w: R, wx: &Self) -> Self {
         TranslationBase {
             vector: Interpolate::barycentric_interpolate(u, &ux.vector,
                                                          v, &vx.vector,
@@ -111,7 +124,7 @@ impl<N, D: DimName, S> Interpolate for TranslationBase<N, D, S> where N: Scalar,
     }
 
     #[inline]
-    fn linear_interpolate(t: f32, x1: &Self, x2: &Self) -> Self {
+    fn linear_interpolate<R: Float>(t: R, x1: &Self, x2: &Self) -> Self {
         TranslationBase {
             vector: Interpolate::linear_interpolate(t, &x1.vector, &x2.vector)
         }
@@ -122,7 +135,7 @@ impl<N, D: DimName, S> Interpolate for RotationBase<N, D, S> where N: Scalar,
                                                                    S: Storage<N, D, D>,
                                                                    Matrix<N, D, D, S>: Interpolate {
     #[inline]
-    fn barycentric_interpolate(u: f32, ux: &Self, v: f32, vx: &Self, w: f32, wx: &Self) -> Self {
+    fn barycentric_interpolate<R: Float>(u: R, ux: &Self, v: R, vx: &Self, w: R, wx: &Self) -> Self {
         RotationBase::from_matrix_unchecked(Interpolate::barycentric_interpolate(
             u, ux.matrix(),
             v, vx.matrix(),
@@ -131,7 +144,7 @@ impl<N, D: DimName, S> Interpolate for RotationBase<N, D, S> where N: Scalar,
     }
 
     #[inline]
-    fn linear_interpolate(t: f32, x1: &Self, x2: &Self) -> Self {
+    fn linear_interpolate<R: Float>(t: R, x1: &Self, x2: &Self) -> Self {
         RotationBase::from_matrix_unchecked(Interpolate::linear_interpolate(t, x1.matrix(), x2.matrix()))
     }
 }
@@ -144,7 +157,7 @@ macro_rules! nalgebra_matrix_uniforms {
                   S: OwnedStorage<N, $R, $C>,
                   S::Alloc: OwnedAllocator<N, $R, $C, S> {
             #[inline]
-            fn barycentric_interpolate(u: f32, ux: &Self, v: f32, vx: &Self, w: f32, wx: &Self) -> Self {
+            fn barycentric_interpolate<R: Float>(u: R, ux: &Self, v: R, vx: &Self, w: R, wx: &Self) -> Self {
                 unsafe {
                     let mut res = Self::new_uninitialized();
 
@@ -161,7 +174,7 @@ macro_rules! nalgebra_matrix_uniforms {
             }
 
             #[inline]
-            fn linear_interpolate(t: f32, x1: &Self, x2: &Self) -> Self {
+            fn linear_interpolate<R: Float>(t: R, x1: &Self, x2: &Self) -> Self {
                 unsafe {
                     let mut res = Self::new_uninitialized();
 
