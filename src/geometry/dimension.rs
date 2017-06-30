@@ -1,5 +1,3 @@
-use ::error::{RenderError, RenderResult};
-
 use super::Coordinate;
 
 /// Defines types with set dimensions

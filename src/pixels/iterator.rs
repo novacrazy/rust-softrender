@@ -1,6 +1,6 @@
 //! Iterator structures for pixelbuffers
 
-use super::{PixelRead, PixelWrite, PixelRef, PixelMut};
+use super::{PixelRead, PixelRef};
 
 /// `PixelBuffer` iterator structure
 pub struct PixelBufferIter<'a, P: 'a> where P: PixelRead {

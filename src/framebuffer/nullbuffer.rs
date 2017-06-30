@@ -3,7 +3,7 @@
 use ::geometry::{Dimensions, HasDimensions};
 use ::pixels::{PixelBuffer, PixelRead, PixelWrite};
 
-use super::{Framebuffer, attachments, Attachments};
+use super::{Framebuffer, attachments};
 
 /// Black-hole Framebuffer that stores no pixels but still has dimensions.
 ///
