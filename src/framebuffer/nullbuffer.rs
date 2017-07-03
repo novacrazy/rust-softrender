@@ -3,7 +3,7 @@
 use ::geometry::{Dimensions, HasDimensions};
 use ::pixels::{PixelBuffer, PixelRead, PixelWrite};
 
-use super::{Framebuffer, attachments};
+use super::{FramebufferBase, UnsafeFramebuffer, Framebuffer, attachments};
 
 /// Black-hole Framebuffer that stores no pixels but still has dimensions.
 ///
@@ -32,9 +32,23 @@ impl PixelWrite for NullFramebuffer {
     unsafe fn set_pixel_unchecked(&mut self, _: usize, _: ()) {}
 }
 
-impl Framebuffer for NullFramebuffer {
+impl FramebufferBase for NullFramebuffer {
     type Attachments = attachments::predefined::EmptyAttachments;
+}
 
+impl UnsafeFramebuffer for NullFramebuffer {
+    #[inline(always)]
+    unsafe fn get_depth_unchecked(&self, _: usize) -> () { () }
+    #[inline(always)]
+    unsafe fn set_depth_unchecked(&mut self, _: usize, _: ()) {}
+
+    #[inline(always)]
+    unsafe fn get_stencil_unchecked(&self, _: usize) -> () { () }
+    #[inline(always)]
+    unsafe fn set_stencil_unchecked(&mut self, _: usize, _: ()) {}
+}
+
+impl Framebuffer for NullFramebuffer {
     #[inline(always)]
     fn clear(&mut self, _: ()) {}
 }
