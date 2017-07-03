@@ -28,10 +28,10 @@ pub type EmptyAttachments = ColorDepthStencilAttachments<(), (), ()>;
 #[cfg(test)]
 mod test {
     use std::mem::size_of;
-    use ::framebuffer::attachments::{ColorDepthStencilAttachments, GenericStencil};
+    use ::framebuffer::attachments::ColorDepthStencilAttachments;
 
     #[test]
     fn test_cds_attachments_size() {
-        assert_eq!(0, size_of::<ColorDepthStencilAttachments<(), f32, GenericStencil<u8>>>())
+        assert_eq!(0, size_of::<ColorDepthStencilAttachments<(), f32, u8>>())
     }
 }

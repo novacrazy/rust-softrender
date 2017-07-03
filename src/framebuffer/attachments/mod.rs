@@ -1,9 +1,9 @@
 use ::behavior::ThreadSafeCopyable;
 
 pub use ::color;
+pub use ::stencil;
 
 pub mod depth;
-pub mod stencil;
 
 pub trait Attachment: ThreadSafeCopyable {}
 
@@ -11,7 +11,7 @@ impl<T> Attachment for T where T: ThreadSafeCopyable {}
 
 pub use self::color::Color;
 pub use self::depth::Depth;
-pub use self::stencil::{Stencil, StencilOp, StencilTest, StencilType, StencilConfig, GenericStencilConfig, GenericStencil};
+pub use self::stencil::{Stencil, StencilOp, StencilTest, StencilConfig, GenericStencilConfig};
 
 /// Marker trait only defined for `()`, an empty tuple.
 pub trait EmptyAttachment {}

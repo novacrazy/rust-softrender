@@ -68,6 +68,7 @@ pub mod behavior;
 pub mod color;
 pub mod pixels;
 pub mod mesh;
+pub mod stencil;
 pub mod framebuffer;
 pub mod primitive;
 pub mod geometry;
