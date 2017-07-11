@@ -1,6 +1,7 @@
 //! Flexible custom Framebuffer designed for re-use
 
 use std::slice;
+use std::ops::Deref;
 
 use ::color::Color;
 use ::geometry::{Dimensions, HasDimensions};
@@ -16,14 +17,18 @@ pub struct TextureBufferRef<'a, F: Framebuffer, C: Color> {
     parent: &'a F,
 }
 
+impl<'a, F: Framebuffer, C: Color> Deref for TextureBufferRef<'a, F, C> {
+    type Target = [C];
+
+    #[inline]
+    fn deref(&self) -> &[C] { self.buffer }
+}
+
 impl<'a, F: Framebuffer, C: Color> TextureBufferRef<'a, F, C> {
     #[doc(hidden)]
     pub fn __new(buffer: &'a [C], parent: &'a F) -> TextureBufferRef<'a, F, C> {
         TextureBufferRef { buffer, parent }
     }
-
-    /// Returns a iterator to the underlying color buffer
-    pub fn iter(&self) -> slice::Iter<C> { self.buffer.iter() }
 }
 
 impl<'a, F: Framebuffer, C: Color> HasDimensions for TextureBufferRef<'a, F, C> {
