@@ -199,21 +199,28 @@ impl<'a, P: 'a, V, T, K, B> FragmentShader<'a, P, V, T, K, B> where P: PipelineO
         unsafe impl<P> Send for NeverDoThis<P> {}
         unsafe impl<P> Sync for NeverDoThis<P> {}
 
+        /// Create unsafe mutable point to the pipeline
         let seriously_dont = NeverDoThis { pipeline: pipeline as *mut P };
 
         tiles.into_par_iter().for_each(|tile: (Coordinate, Coordinate)| {
             println!("Tile {:?}", tile);
 
+            // Get the unsafe mutable reference to the pipeline
             let pipeline: &mut P = unsafe { &mut *seriously_dont.pipeline };
 
+            ////////////////////////////////////////
             let rasterize_triangle = |framebuffer: &mut <P as PipelineObject>::Framebuffer,
-                                      a: &ScreenVertex<V::Scalar, K>, b: &ScreenVertex<V::Scalar, K>, c: &ScreenVertex<V::Scalar, K>| {
+                                      a: &ScreenVertex<V::Scalar, K>,
+                                      b: &ScreenVertex<V::Scalar, K>,
+                                      c: &ScreenVertex<V::Scalar, K>| {
+                // Dereference/transmute required position components at once
                 let XYZW { x: x1, y: y1, .. } = *a.position;
                 let XYZW { x: x2, y: y2, .. } = *b.position;
                 let XYZW { x: x3, y: y3, .. } = *c.position;
 
                 // do backface culling
                 if let Some(winding) = cull_faces {
+                    // Shoelace algorithm for a triangle
                     let a = x1 * y2 + x2 * y3 + x3 * y1 - x2 * y1 - x3 * y2 - x1 * y3;
 
                     if winding == if a.is_sign_negative() { FaceWinding::Clockwise } else { FaceWinding::CounterClockwise } {
@@ -238,6 +245,7 @@ impl<'a, P: 'a, V, T, K, B> FragmentShader<'a, P, V, T, K, B> where P: PipelineO
                 let max = Coordinate::new(clamp_as_int!(x1.max(x2).max(x3), tile.0.x, tile.1.x),
                                           clamp_as_int!(y1.max(y2).max(y3), tile.0.y, tile.1.y));
 
+                // Fetch stencil test and operation before tile loop
                 let stencil_test = pipeline.stencil_config().get_test();
                 let stencil_op = pipeline.stencil_config().get_op();
 
@@ -249,12 +257,15 @@ impl<'a, P: 'a, V, T, K, B> FragmentShader<'a, P, V, T, K, B> where P: PipelineO
                     while pixel.x < max.x {
                         let index = pixel.into_index(dimensions);
 
+                        // Get stencil buffer value for this pixel
                         let framebuffer_stencil_value = unsafe { framebuffer.get_stencil_unchecked(index) };
 
                         // perform stencil test
                         if stencil_test.test(framebuffer_stencil_value, stencil_value) {
+                            // Calculate new stencil value
                             let new_stencil_value = stencil_op.op(framebuffer_stencil_value, stencil_value);
 
+                            // Set stencil value for this pixel
                             unsafe { framebuffer.set_stencil_unchecked(index, new_stencil_value); }
 
                             //continue on to fragment shading
@@ -268,18 +279,23 @@ impl<'a, P: 'a, V, T, K, B> FragmentShader<'a, P, V, T, K, B> where P: PipelineO
                             let v = ((y3 - y1) * (x - x3) + (x1 - x3) * (y - y3)) / det;
                             let w = <V::Scalar as One>::one() - u - v;
 
+                            // Determine if pixel is even within the triangle
                             if !(u < Zero::zero() || v < Zero::zero() || w < Zero::zero()) {
                                 // interpolate screen-space position
                                 let position = Interpolate::barycentric_interpolate(u, &a.position, v, &b.position, w, &c.position);
 
+                                // Dereference/transmute position only once
                                 let z = position.z;
 
+                                // Check if point is in front of the screen
                                 if z < Zero::zero() {
                                     let d: DepthAttachment<P::Framebuffer> = Depth::from_scalar(z);
 
                                     let dt = unsafe { framebuffer.get_depth_unchecked(index) };
 
+                                    // Check if point is in front of other geometry
                                     if d < dt {
+                                        // Perform fragment shading
                                         let fragment = fragment_shader(&ScreenVertex {
                                             position,
                                             uniforms: Interpolate::barycentric_interpolate(u, &a.uniforms,
