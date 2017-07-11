@@ -8,6 +8,13 @@ pub trait Primitive {
     /// Get's the number of vertices for the given primitive type
     fn num_vertices() -> usize;
 
+    #[inline(always)]
+    fn is_point() -> bool { false }
+    #[inline(always)]
+    fn is_line() -> bool { false }
+    #[inline(always)]
+    fn is_triangle() -> bool { false }
+
     /// Creates a `PrimitiveRef` from some vertices
     ///
     /// This is used internally.
@@ -70,6 +77,9 @@ impl Primitive for Point {
     #[inline(always)]
     fn num_vertices() -> usize { 1 }
 
+    #[inline(always)]
+    fn is_point() -> bool { true }
+
     fn create_ref_from_vertices<'p, N: FloatScalar, K>(vertices: &'p [ClipVertex<N, K>]) -> PrimitiveRef<'p, N, K> {
         debug_assert_eq!(vertices.len(), Self::num_vertices());
 
@@ -92,6 +102,9 @@ impl Primitive for Point {
 impl Primitive for Line {
     #[inline(always)]
     fn num_vertices() -> usize { 2 }
+
+    #[inline(always)]
+    fn is_line() -> bool { true }
 
     fn create_ref_from_vertices<'p, N: FloatScalar, K>(vertices: &'p [ClipVertex<N, K>]) -> PrimitiveRef<'p, N, K> {
         debug_assert_eq!(vertices.len(), Self::num_vertices());
@@ -120,6 +133,9 @@ impl Primitive for Line {
 impl Primitive for Triangle {
     #[inline(always)]
     fn num_vertices() -> usize { 3 }
+
+    #[inline(always)]
+    fn is_triangle() -> bool { true }
 
     fn create_ref_from_vertices<'p, N: FloatScalar, K>(vertices: &'p [ClipVertex<N, K>]) -> PrimitiveRef<'p, N, K> {
         debug_assert_eq!(vertices.len(), Self::num_vertices());
