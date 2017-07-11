@@ -11,7 +11,7 @@ use ::mesh::{Vertex, Mesh};
 use ::interpolate::Interpolate;
 use ::geometry::ClipVertex;
 
-use ::pipeline::types::PipelineUniforms;
+use ::pipeline::types::{PipelineUniforms, StencilValue};
 
 /// Vertex shader stage.
 ///
@@ -24,13 +24,18 @@ use ::pipeline::types::PipelineUniforms;
 /// The vertex shader holds a reference to the pipeline framebuffer and global uniforms,
 /// and for the given mesh given to it when created.
 /// These cannot be modified while the vertex shader exists.
-pub struct VertexShader<'a, P: 'a, V: Vertex, T> {
+
+pub struct VertexShader<'a, P: 'a, V: Vertex, T> where P: PipelineObject {
     pub ( in ::pipeline) pipeline: &'a mut P,
     pub ( in ::pipeline) mesh: Arc<Mesh<V>>,
     pub ( in ::pipeline) indexed_primitive: PhantomData<T>,
+    pub ( in ::pipeline) stencil_value: StencilValue<P>
 }
 
-impl<'a, P: 'a, V, T> VertexShader<'a, P, V, T> where V: Vertex {
+impl<'a, P: 'a, V, T> VertexShader<'a, P, V, T> where P: PipelineObject,
+                                                      V: Vertex,
+                                                      T: Primitive {
+
     /// Duplicates all references to internal state to return a cloned vertex shader,
     /// though since the vertex shader itself has very little internal state at this point,
     /// it's not that useful.
@@ -40,13 +45,10 @@ impl<'a, P: 'a, V, T> VertexShader<'a, P, V, T> where V: Vertex {
             pipeline: self.pipeline,
             mesh: self.mesh.clone(),
             indexed_primitive: PhantomData,
+            stencil_value: self.stencil_value,
         }
     }
-}
 
-impl<'a, P: 'a, V, T> VertexShader<'a, P, V, T> where P: PipelineObject,
-                                                      V: Vertex,
-                                                      T: Primitive {
     /// Executes the vertex shader on every vertex in the mesh,
     /// (hopefully) returning a `ClipVertex` with the transformed vertex in clip-space
     /// and any uniforms to be passed into the fragment shader.
@@ -83,7 +85,7 @@ impl<'a, P: 'a, V, T> VertexShader<'a, P, V, T> where P: PipelineObject,
     #[must_use]
     pub fn run<S, K>(self, vertex_shader: S) -> GeometryShader<'a, P, V, T, K> where S: Fn(&V, &PipelineUniforms<P>) -> ClipVertex<V::Scalar, K> + Send + Sync,
                                                                                      K: Send + Sync + Interpolate {
-        let VertexShader { pipeline, mesh, .. } = self;
+        let VertexShader { pipeline, mesh, stencil_value, .. } = self;
 
         let indexed_vertices = {
             // borrow uniforms here so P isn't required to be Send/Sync
@@ -98,6 +100,7 @@ impl<'a, P: 'a, V, T> VertexShader<'a, P, V, T> where P: PipelineObject,
             pipeline,
             mesh,
             indexed_primitive: PhantomData,
+            stencil_value,
             indexed_vertices: Some(indexed_vertices),
             generated_primitives: SeparablePrimitiveStorage::default(),
         }

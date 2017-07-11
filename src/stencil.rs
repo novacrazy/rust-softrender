@@ -109,16 +109,16 @@ pub enum StencilTest {
 impl StencilTest {
     /// Performs the stencil test on any `StencilType` type
     #[inline]
-    pub fn test<T>(&self, present: T, value: T) -> bool where T: Stencil {
+    pub fn test<T>(&self, value: T, mask: T) -> bool where T: Stencil {
         match *self {
             StencilTest::Always => true,
             StencilTest::Never => false,
-            StencilTest::LessThan => value < present,
-            StencilTest::LessThanEq => value <= present,
-            StencilTest::GreaterThan => value > present,
-            StencilTest::GreaterThanEq => value >= present,
-            StencilTest::Equal => value == present,
-            StencilTest::NotEqual => value != present,
+            StencilTest::LessThan => mask < value,
+            StencilTest::LessThanEq => mask <= value,
+            StencilTest::GreaterThan => mask > value,
+            StencilTest::GreaterThanEq => mask >= value,
+            StencilTest::Equal => mask == value,
+            StencilTest::NotEqual => mask != value,
         }
     }
 }
@@ -126,30 +126,30 @@ impl StencilTest {
 
 /// Defines the operation to be performed upon a passing stencil test
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-pub enum StencilOp<T: Stencil> {
+pub enum StencilOp {
     /// Keep the previous stencil value
     Keep,
     /// Perform a bitwise negation on the previous value
     Invert,
     /// Replace the previous value with zero
     Zero,
-    /// Replace the previous value with the given value
-    Replace(T),
+    /// Replace the previous value with the mesh value
+    Replace,
     /// Increment the previous value by one, wrapping as desired.
     Increment { wrap: bool },
     /// Decrement the previous value by one, wrapping as desired.
     Decrement { wrap: bool },
 }
 
-impl<T> StencilOp<T> where T: Stencil {
+impl StencilOp {
     /// Performs the operation on the value, returning the new value
     #[inline]
-    pub fn op(&self, value: T) -> T {
+    pub fn op<T>(&self, value: T, mask: T) -> T where T: Stencil {
         match *self {
             StencilOp::Keep => value,
             StencilOp::Invert => Stencil::not(value),
             StencilOp::Zero => Stencil::zero(),
-            StencilOp::Replace(replacement) => replacement,
+            StencilOp::Replace => mask,
             StencilOp::Increment { wrap: true } => Stencil::wrapping_add(value, Stencil::one()),
             StencilOp::Decrement { wrap: true } => Stencil::wrapping_sub(value, Stencil::one()),
             StencilOp::Increment { wrap: false } => Stencil::saturating_add(value, Stencil::one()),
@@ -159,38 +159,38 @@ impl<T> StencilOp<T> where T: Stencil {
 }
 
 /// Defines a stateful configuration for a stencil buffer
-pub trait StencilConfig<T: Stencil>: Clone + Copy + Default {
+pub trait StencilConfig: Clone + Copy + Default {
     /// Return the operation to be performed
-    fn op(&self) -> StencilOp<T>;
+    fn get_op(&self) -> StencilOp;
     /// Return the test to be performed
-    fn test(&self) -> StencilTest;
+    fn get_test(&self) -> StencilTest;
 }
 
-impl StencilConfig<()> for () {
+impl StencilConfig for () {
     #[inline(always)]
-    fn op(&self) -> StencilOp<()> { StencilOp::Keep }
+    fn get_op(&self) -> StencilOp { StencilOp::Keep }
 
     #[inline(always)]
-    fn test(&self) -> StencilTest { StencilTest::Always }
+    fn get_test(&self) -> StencilTest { StencilTest::Always }
 }
 
 /// Generic stencil config that just stores the `StencilOp` and `StencilTest` structures.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct GenericStencilConfig<T: Stencil = ()> {
-    pub op: StencilOp<T>,
+pub struct GenericStencilConfig {
+    pub op: StencilOp,
     pub test: StencilTest,
 }
 
-impl<T> StencilConfig<T> for GenericStencilConfig<T> where T: Stencil {
+impl StencilConfig for GenericStencilConfig {
     #[inline(always)]
-    fn op(&self) -> StencilOp<T> { self.op }
+    fn get_op(&self) -> StencilOp { self.op }
 
     #[inline(always)]
-    fn test(&self) -> StencilTest { self.test }
+    fn get_test(&self) -> StencilTest { self.test }
 }
 
-impl<T> Default for GenericStencilConfig<T> where T: Stencil {
-    fn default() -> GenericStencilConfig<T> {
+impl Default for GenericStencilConfig {
+    fn default() -> GenericStencilConfig {
         GenericStencilConfig {
             op: StencilOp::Keep,
             test: StencilTest::Always,

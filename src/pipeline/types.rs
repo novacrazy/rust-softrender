@@ -1,7 +1,7 @@
 //! Helper type aliases
 
 use ::pixels::PixelBuffer;
-use ::framebuffer::Framebuffer;
+use ::framebuffer::types::StencilAttachment;
 
 use super::PipelineObject;
 
@@ -10,3 +10,5 @@ pub type Pixel<P> = <<P as PipelineObject>::Framebuffer as PixelBuffer>::Color;
 
 /// Global uniforms for a pipeline object
 pub type PipelineUniforms<P> = <P as PipelineObject>::Uniforms;
+
+pub type StencilValue<P> = StencilAttachment<<P as PipelineObject>::Framebuffer>;

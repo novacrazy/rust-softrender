@@ -15,7 +15,7 @@ use ::pipeline::storage::{PrimitiveStorage, SeparablePrimitiveStorage, Separable
 use ::pipeline::{PipelineObject, FragmentShader};
 use ::pipeline::stages::fragment::DEFAULT_TILE_SIZE;
 
-use ::pipeline::types::PipelineUniforms;
+use ::pipeline::types::{PipelineUniforms, StencilValue};
 
 /// Geometry shader stage
 ///
@@ -25,15 +25,16 @@ use ::pipeline::types::PipelineUniforms;
 /// and geometry visualisations like normal vector lines.
 ///
 /// The geometry shader can be ran multiple times.
-pub struct GeometryShader<'a, P: 'a, V: Vertex, T, K> {
+pub struct GeometryShader<'a, P: 'a, V: Vertex, T, K> where P: PipelineObject {
     pub ( in ::pipeline) pipeline: &'a mut P,
     pub ( in ::pipeline) mesh: Arc<Mesh<V>>,
     pub ( in ::pipeline) indexed_primitive: PhantomData<T>,
+    pub ( in ::pipeline) stencil_value: StencilValue<P>,
     pub ( in ::pipeline) indexed_vertices: Option<Vec<ClipVertex<V::Scalar, K>>>,
     pub ( in ::pipeline) generated_primitives: SeparablePrimitiveStorage<V::Scalar, K>,
 }
 
-impl<'a, P: 'a, V, T, K> GeometryShader<'a, P, V, T, K> where V: Vertex {
+impl<'a, P: 'a, V, T, K> GeometryShader<'a, P, V, T, K> where P: PipelineObject, V: Vertex {
     /// Duplicate the geometry shader, and copies any processed geometry.
     ///
     /// Geometry are not synced between duplicated geometry shaders.
@@ -43,6 +44,7 @@ impl<'a, P: 'a, V, T, K> GeometryShader<'a, P, V, T, K> where V: Vertex {
             pipeline: self.pipeline,
             mesh: self.mesh.clone(),
             indexed_primitive: PhantomData,
+            stencil_value: self.stencil_value,
             indexed_vertices: self.indexed_vertices.clone(),
             generated_primitives: self.generated_primitives.clone(),
         }
@@ -55,7 +57,7 @@ impl<'a, P: 'a, V, T, K> GeometryShader<'a, P, V, T, K> where P: PipelineObject,
                                                               K: Send + Sync + Interpolate {
     #[must_use]
     pub fn finish(self, viewport: (V::Scalar, V::Scalar)) -> FragmentShader<'a, P, V, T, K, ()> {
-        let GeometryShader { pipeline, mesh, indexed_vertices, generated_primitives, .. } = self;
+        let GeometryShader { pipeline, mesh, indexed_vertices, stencil_value, generated_primitives, .. } = self;
 
         let SeparablePrimitiveStorage { points, lines, tris } = generated_primitives;
 
@@ -79,6 +81,7 @@ impl<'a, P: 'a, V, T, K> GeometryShader<'a, P, V, T, K> where P: PipelineObject,
             pipeline: pipeline,
             mesh: mesh,
             indexed_primitive: PhantomData,
+            stencil_value,
             indexed_vertices: Arc::new(indexed_vertices),
             generated_primitives: Arc::new(generated_primitives),
             cull_faces: None,
@@ -91,7 +94,7 @@ impl<'a, P: 'a, V, T, K> GeometryShader<'a, P, V, T, K> where P: PipelineObject,
     #[must_use]
     pub fn run<S>(self, geometry_shader: S) -> Self
         where S: for<'s, 'p> Fn(PrimitiveStorage<'s, V::Scalar, K>, PrimitiveRef<'p, V::Scalar, K>, &PipelineUniforms<P>) + Send + Sync + 'static {
-        let GeometryShader { pipeline, mesh, indexed_vertices, generated_primitives, .. } = self;
+        let GeometryShader { pipeline, mesh, indexed_vertices, stencil_value, generated_primitives, .. } = self;
 
         let replaced_primitives = {
             let uniforms = pipeline.uniforms();
@@ -143,6 +146,7 @@ impl<'a, P: 'a, V, T, K> GeometryShader<'a, P, V, T, K> where P: PipelineObject,
             pipeline,
             mesh,
             indexed_primitive: PhantomData,
+            stencil_value,
             indexed_vertices: None,
             generated_primitives: replaced_primitives.unwrap_or_else(|| {
                 SeparablePrimitiveStorage::default()
