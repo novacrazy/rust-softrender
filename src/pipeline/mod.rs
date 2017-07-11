@@ -42,6 +42,9 @@ pub trait PipelineObject {
     fn framebuffer(&self) -> &Self::Framebuffer;
     /// Returns a mutable reference to the framebuffer
     fn framebuffer_mut(&mut self) -> &mut Self::Framebuffer;
+
+    /// Returns an immutable reference to the uniforms and a mutable reference to the framebuffer
+    fn uniforms_framebuffer_mut(&mut self) -> (&Self::Uniforms, &mut Self::Framebuffer);
 }
 
 /// Starting point for the rendering pipeline.
@@ -72,19 +75,20 @@ impl<U, F, S> PipelineObject for Pipeline<U, F, S> where U: Send + Sync,
         &mut self.stencil_config
     }
 
-    /// Returns a reference to the uniforms value
     #[inline]
     fn uniforms(&self) -> &Self::Uniforms { &self.uniforms }
-    /// Returns a mutable reference to the uniforms value
     #[inline]
     fn uniforms_mut(&mut self) -> &mut Self::Uniforms { &mut self.uniforms }
 
-    /// Returns a reference to the framebuffer
     #[inline]
     fn framebuffer(&self) -> &Self::Framebuffer { &self.framebuffer }
-    /// Returns a mutable reference to the framebuffer
     #[inline]
     fn framebuffer_mut(&mut self) -> &mut Self::Framebuffer { &mut self.framebuffer }
+
+    #[inline]
+    fn uniforms_framebuffer_mut(&mut self) -> (&Self::Uniforms, &mut Self::Framebuffer) {
+        (&self.uniforms, &mut self.framebuffer)
+    }
 }
 
 impl<U, S> Pipeline<U, NullFramebuffer, S> where U: Send + Sync, S: StencilConfig {
