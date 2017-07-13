@@ -48,12 +48,35 @@ impl Coordinate {
     /// Convert a 1D array index into a 2D coordinate using the given `Dimensions`
     #[inline]
     pub fn from_index(index: usize, dimensions: Dimensions) -> Coordinate {
-        let Dimensions { width, height } = dimensions;
+        let width = dimensions.width as usize;
 
-        let x = index % width as usize;
-        let y = (index - x) / height as usize;
+        let x = index % width;
+        let y = (index - x) / width;
 
         Coordinate { x: x as u32, y: y as u32 }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::{Dimensions, Coordinate};
+
+    #[test]
+    fn coordinate_index() {
+        let dim = Dimensions::new(10, 20);
+
+        let mut i = 0;
+
+        for y in 0..dim.height {
+            for x in 0..dim.width {
+                let coord = Coordinate::new(x, y);
+
+                assert_eq!(coord.into_index(dim), i);
+                assert_eq!(Coordinate::from_index(i, dim), coord);
+
+                i += 1;
+            }
+        }
     }
 }
 
