@@ -39,8 +39,10 @@ impl Coordinate {
     /// Convert a 2D coordinate into a 1D array index using the given `Dimensions`
     #[inline]
     pub fn into_index(self, dimensions: Dimensions) -> usize {
-        let Coordinate { x, y } = self;
-        x as usize + y as usize * dimensions.height as usize
+        debug_assert!(self.x < dimensions.width);
+        debug_assert!(self.y < dimensions.height);
+
+        self.x as usize + self.y as usize * dimensions.width as usize
     }
 
     /// Convert a 1D array index into a 2D coordinate using the given `Dimensions`
