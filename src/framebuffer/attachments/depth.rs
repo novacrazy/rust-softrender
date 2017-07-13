@@ -31,7 +31,7 @@ macro_rules! impl_depth_primitives {
                 fn far() -> $t { <$t as Bounded>::min_value() }
 
                 #[inline(always)]
-                fn from_scalar<N: FloatScalar>(n: N) -> Self {
+                fn from_scalar<N: FloatScalar>(n: N) -> $t {
                     <$t as NumCast>::from(n).expect("Invalid Cast")
                 }
             }
