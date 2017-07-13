@@ -68,11 +68,9 @@ impl<N, K> ClipVertex<N, K> where N: FloatScalar,
 
                 let XYZW { x, y, z, w } = *self.position;
 
-                let two = N::one() + N::one();
-
                 Vector4::new(
-                    (N::one() + x / w) * width / two,
-                    (N::one() - y / w) * height / two,
+                    (N::one() + x / w) * width / N::from(2.0).unwrap(),
+                    (N::one() - y / w) * height / N::from(2.0).unwrap(),
                     -z / w,
                     N::one() / w
                 )
