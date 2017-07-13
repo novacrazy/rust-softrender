@@ -17,9 +17,9 @@ pub fn liang_barsky_iterative<T: FloatScalar>(start: (T, T), end: (T, T), bounds
 
     for edge in 0..4 {
         let (p, q) = match edge {
-            0 => (-dx, -(xmin - x1)),
+            0 => (-dx, (x1 - xmin)),
             1 => (dx, (xmax - x1)),
-            2 => (-dy, -(ymin - y1)),
+            2 => (-dy, (y1 - ymin)),
             3 => (dy, (ymax - y1)),
             _ => unreachable!()
         };
