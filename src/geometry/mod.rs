@@ -6,6 +6,7 @@ pub mod winding;
 pub mod clipvertex;
 pub mod screenvertex;
 pub mod clip;
+pub mod line;
 
 pub use self::dimension::{Dimensions, HasDimensions};
 pub use self::coordinate::Coordinate;
