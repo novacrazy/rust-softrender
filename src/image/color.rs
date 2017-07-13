@@ -5,9 +5,9 @@ use num_traits::{Float, PrimInt};
 use ::behavior::ThreadSafeCopyable;
 use ::geometry::{Coordinate, Dimensions, HasDimensions};
 use ::pixels::{PixelBuffer, PixelRead, PixelWrite};
-use ::color::{Color, AlphaMultiply};
+use ::color::{Color, ColorAlpha, AlphaMultiply};
 
-impl<T: Primitive> Color for Rgb<T> where T: ThreadSafeCopyable + Default {
+impl<T: Primitive> Color for Rgb<T> where T: ColorAlpha {
     type Alpha = ();
 
     #[inline]
@@ -25,7 +25,7 @@ impl<T: Primitive> Color for Rgb<T> where T: ThreadSafeCopyable + Default {
     fn get_alpha(&self) -> () { () }
 }
 
-impl<T: Primitive> Color for Luma<T> where T: ThreadSafeCopyable + Default {
+impl<T: Primitive> Color for Luma<T> where T: ColorAlpha {
     type Alpha = ();
 
     #[inline]
@@ -43,7 +43,7 @@ impl<T: Primitive> Color for Luma<T> where T: ThreadSafeCopyable + Default {
     fn get_alpha(&self) -> () { () }
 }
 
-impl<T: Primitive> Color for Rgba<T> where T: AlphaMultiply + ThreadSafeCopyable + Default {
+impl<T: Primitive> Color for Rgba<T> where T: AlphaMultiply + ColorAlpha {
     type Alpha = T;
 
     #[inline]
@@ -79,7 +79,7 @@ impl<T: Primitive> Color for Rgba<T> where T: AlphaMultiply + ThreadSafeCopyable
     }
 }
 
-impl<T: Primitive> Color for LumaA<T> where T: AlphaMultiply + ThreadSafeCopyable + Default {
+impl<T: Primitive> Color for LumaA<T> where T: AlphaMultiply + ColorAlpha {
     type Alpha = T;
 
     #[inline]
