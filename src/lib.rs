@@ -75,16 +75,18 @@ pub mod geometry;
 pub mod texture;
 pub mod pipeline;
 
-#[cfg(feature = "image_compat")]
-pub mod image;
+//#[cfg(feature = "image_compat")]
+//pub mod image;
 
 pub use numeric::interpolate;
 pub use framebuffer::attachments;
 
 pub mod prelude {
+    pub use ::color::blend::{Blend, GenericBlend, BoxedGenericBlend};
     pub use ::geometry::{Dimensions, HasDimensions, Coordinate, ClipVertex, ScreenVertex, FaceWinding};
     pub use ::primitive::{Primitive, Point, Line, Triangle, PrimitiveRef, PrimitiveMut};
-    pub use ::mesh::{Vertex, Mesh};
+    pub use ::mesh::{Vertex, SimpleVertex, Mesh};
+    pub use ::pixels::{PixelBuffer, PixelRead, PixelWrite, PartialPixelBuffer};
     pub use ::framebuffer::{Framebuffer, RenderBuffer, Attachments};
     pub use ::interpolate::Interpolate;
     pub use ::pipeline::{Pipeline, PipelineObject,
