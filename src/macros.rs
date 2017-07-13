@@ -55,17 +55,17 @@ macro_rules! declare_uniforms {
         }
 
         impl $crate::interpolate::Interpolate for $name {
-            fn barycentric_interpolate(u: f32, ux: &Self, v: f32, vx: &Self, w: f32, wx: &Self) -> Self {
+            fn barycentric_interpolate<N: $crate::numeric::Float>(u: N, ux: &Self, v: N, vx: &Self, w: N, wx: &Self) -> Self {
                 $name {
                     $(
                         $field: $crate::interpolate::Interpolate::barycentric_interpolate(u, &ux.$field,
-                                                                                     v, &vx.$field,
-                                                                                     w, &wx.$field)
+                                                                                          v, &vx.$field,
+                                                                                          w, &wx.$field)
                     ),*
                 }
             }
 
-            fn linear_interpolate(t: f32, x1: &Self, x2: &Self) -> Self {
+            fn linear_interpolate<N: $crate::numeric::Float>(t: N, x1: &Self, x2: &Self) -> Self {
                 $name {
                     $(
                           $field: $crate::interpolate::Interpolate::linear_interpolate(t, &x1.$field, &x2.$field)
