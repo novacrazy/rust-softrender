@@ -7,7 +7,7 @@ use nalgebra::coordinates::XYZW;
 
 use ::behavior::ThreadSafeCopyable;
 
-use super::Color;
+use super::{Color, ColorAlpha};
 use super::helper::AlphaMultiply;
 
 pub mod formats {
@@ -65,7 +65,7 @@ pub mod formats {
     }
 }
 
-impl<T> Color for Vector4<T> where T: Scalar + Num + AlphaMultiply + ThreadSafeCopyable + Default {
+impl<T> Color for Vector4<T> where T: Scalar + Num + AlphaMultiply + ColorAlpha {
     type Alpha = T;
 
     #[inline]

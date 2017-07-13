@@ -7,23 +7,29 @@ macro_rules! tuple_impls {
         }
     )+) => {
         $(
-            impl<$($T),+> $crate::attachments::Color for ($($T,)+) where $($T: $crate::attachments::Color,)+ {
-                type Alpha = ($(<$T as $crate::attachments::Color>::Alpha,)+);
+            impl<$($T),+> $crate::color::ColorAlpha for ($($T,)+) where $($T: $crate::color::ColorAlpha,)+ {
+                fn from_scalar<N: $crate::numeric::FloatScalar>(n: N) -> Self {
+                    ($(<$T as $crate::color::ColorAlpha>::from_scalar(n),)+)
+                }
+            }
+
+            impl<$($T),+> $crate::color::Color for ($($T,)+) where $($T: $crate::color::Color,)+ {
+                type Alpha = ($(<$T as $crate::color::Color>::Alpha,)+);
 
                 fn empty() -> Self {
-                    ($(<$T as $crate::attachments::Color>::empty(),)+)
+                    ($(<$T as $crate::color::Color>::empty(),)+)
                 }
 
                 fn with_alpha(self, alpha: Self::Alpha) -> Self {
-                    ($(<$T as $crate::attachments::Color>::with_alpha(self.$idx, alpha.$idx),)+)
+                    ($(<$T as $crate::color::Color>::with_alpha(self.$idx, alpha.$idx),)+)
                 }
 
                 fn mul_alpha(self, alpha: Self::Alpha) -> Self {
-                    ($(<$T as $crate::attachments::Color>::mul_alpha(self.$idx, alpha.$idx),)+)
+                    ($(<$T as $crate::color::Color>::mul_alpha(self.$idx, alpha.$idx),)+)
                 }
 
                 fn get_alpha(&self) -> Self::Alpha {
-                    ($(<$T as $crate::attachments::Color>::get_alpha(&self.$idx),)+)
+                    ($(<$T as $crate::color::Color>::get_alpha(&self.$idx),)+)
                 }
             }
 
