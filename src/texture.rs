@@ -1,9 +1,21 @@
 //! Texture handling
+use nalgebra::Vector2;
 
 use ::error::RenderResult;
 
+use ::numeric::FloatScalar;
 use ::color::Color;
 use ::pixels::{PixelBuffer, PixelRead, PixelWrite};
+use ::geometry::Coordinate;
+
+pub type TextureColor<T> = <T as PixelBuffer>::Color;
+
+/// A more traditional texture sampling method reminiscent of OpenGL.
+pub fn texture<T: TextureRead, N: FloatScalar>(t: &T, coord: Vector2<N>,
+                                               filter: Filter,
+                                               edge: Edge<TextureColor<T>>) -> RenderResult<TextureColor<T>> {
+    t.sample(coord, filter, edge)
+}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Filter {
@@ -35,7 +47,7 @@ pub trait Texture: PixelBuffer {}
 
 pub trait TextureRead: Texture + PixelRead {
     /// Samples a pixel from a floating-point coordinate, applying the selected `Filter` and `Edge` behavior.
-    fn sample(&self, _x: f32, _y: f32, _filter: Filter, _edge: Edge<Self::Color>) -> RenderResult<Self::Color> {
+    fn sample<N: FloatScalar>(&self, _coord: Vector2<N>, _filter: Filter, _edge: Edge<TextureColor<Self>>) -> RenderResult<TextureColor<Self>> {
         unimplemented!()
     }
 }
@@ -44,7 +56,7 @@ pub trait TextureWrite: Texture + PixelWrite {
     /// "Unsamples", or writes, to a floating-point coordinate, applying the selected `Filter` and `Edge` behavior.
     ///
     /// This allows writing to multiple pixels based on fractional coordinates.
-    fn unsample(&mut self, _x: f32, _y: f32, _filter: Filter, _edge: Edge<Self::Color>) -> RenderResult<()> {
+    fn unsample<N: FloatScalar>(&mut self, _coord: Vector2<N>, _filter: Filter, _edge: Edge<TextureColor<Self>>) -> RenderResult<()> {
         unimplemented!()
     }
 }
