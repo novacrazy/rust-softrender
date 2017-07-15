@@ -81,21 +81,21 @@ impl Primitive for Point {
     fn is_point() -> bool { true }
 
     fn create_ref_from_vertices<'p, N: FloatScalar, K>(vertices: &'p [ClipVertex<N, K>]) -> PrimitiveRef<'p, N, K> {
-        debug_assert_eq!(vertices.len(), Self::num_vertices());
+        debug_assert!(vertices.len() >= Self::num_vertices());
 
         PrimitiveRef::Point(&vertices[0])
     }
 
     fn create_mut_from_vertices<'p, N: FloatScalar, K>(vertices: &'p mut [ClipVertex<N, K>]) -> PrimitiveMut<'p, N, K> {
-        debug_assert_eq!(vertices.len(), Self::num_vertices());
+        debug_assert!(vertices.len() >= Self::num_vertices());
 
         PrimitiveMut::Point(&mut vertices[0])
     }
 
     fn create_ref_from_indexed_vertices<'p, N: FloatScalar, K>(vertices: &'p [ClipVertex<N, K>], indices: &[usize]) -> PrimitiveRef<'p, N, K> {
-        debug_assert_eq!(indices.len(), Self::num_vertices());
+        debug_assert!(indices.len() >= Self::num_vertices());
 
-        PrimitiveRef::Point(&vertices[indices[0] as usize])
+        PrimitiveRef::Point(&vertices[indices[0]])
     }
 }
 
@@ -107,13 +107,13 @@ impl Primitive for Line {
     fn is_line() -> bool { true }
 
     fn create_ref_from_vertices<'p, N: FloatScalar, K>(vertices: &'p [ClipVertex<N, K>]) -> PrimitiveRef<'p, N, K> {
-        debug_assert_eq!(vertices.len(), Self::num_vertices());
+        debug_assert!(vertices.len() >= Self::num_vertices());
 
         PrimitiveRef::Line { start: &vertices[0], end: &vertices[1] }
     }
 
     fn create_mut_from_vertices<'p, N: FloatScalar, K>(vertices: &'p mut [ClipVertex<N, K>]) -> PrimitiveMut<'p, N, K> {
-        debug_assert_eq!(vertices.len(), Self::num_vertices());
+        debug_assert!(vertices.len() >= Self::num_vertices());
 
         let (mut start, mut end) = vertices.split_at_mut(1);
 
@@ -121,11 +121,11 @@ impl Primitive for Line {
     }
 
     fn create_ref_from_indexed_vertices<'p, N: FloatScalar, K>(vertices: &'p [ClipVertex<N, K>], indices: &[usize]) -> PrimitiveRef<'p, N, K> {
-        debug_assert_eq!(indices.len(), Self::num_vertices());
+        debug_assert!(indices.len() >= Self::num_vertices());
 
         PrimitiveRef::Line {
-            start: &vertices[indices[0] as usize],
-            end: &vertices[indices[1] as usize],
+            start: &vertices[indices[0]],
+            end: &vertices[indices[1]],
         }
     }
 }
@@ -138,7 +138,7 @@ impl Primitive for Triangle {
     fn is_triangle() -> bool { true }
 
     fn create_ref_from_vertices<'p, N: FloatScalar, K>(vertices: &'p [ClipVertex<N, K>]) -> PrimitiveRef<'p, N, K> {
-        debug_assert_eq!(vertices.len(), Self::num_vertices());
+        debug_assert!(vertices.len() >= Self::num_vertices());
 
         PrimitiveRef::Triangle {
             a: &vertices[0],
@@ -148,7 +148,7 @@ impl Primitive for Triangle {
     }
 
     fn create_mut_from_vertices<'p, N: FloatScalar, K>(vertices: &'p mut [ClipVertex<N, K>]) -> PrimitiveMut<'p, N, K> {
-        debug_assert_eq!(vertices.len(), Self::num_vertices());
+        debug_assert!(vertices.len() >= Self::num_vertices());
 
         let (mut a, mut bc) = vertices.split_at_mut(1);
         let (mut b, mut c) = bc.split_at_mut(1);
@@ -157,12 +157,12 @@ impl Primitive for Triangle {
     }
 
     fn create_ref_from_indexed_vertices<'p, N: FloatScalar, K>(vertices: &'p [ClipVertex<N, K>], indices: &[usize]) -> PrimitiveRef<'p, N, K> {
-        debug_assert_eq!(indices.len(), Self::num_vertices());
+        debug_assert!(indices.len() >= Self::num_vertices());
 
         PrimitiveRef::Triangle {
-            a: &vertices[indices[0] as usize],
-            b: &vertices[indices[1] as usize],
-            c: &vertices[indices[2] as usize],
+            a: &vertices[indices[0]],
+            b: &vertices[indices[1]],
+            c: &vertices[indices[2]],
         }
     }
 }
