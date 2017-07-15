@@ -21,24 +21,6 @@ impl<N, K> Default for SeparablePrimitiveStorage<N, K> where N: FloatScalar {
     }
 }
 
-// Internal type for accumulating varying primitives in screen-space
-#[derive(Clone)]
-pub ( in ::pipeline ) struct SeparableScreenPrimitiveStorage<N: FloatScalar, K> {
-    pub points: Vec<ScreenVertex<N, K>>,
-    pub lines: Vec<ScreenVertex<N, K>>,
-    pub tris: Vec<ScreenVertex<N, K>>,
-}
-
-impl<N, K> Default for SeparableScreenPrimitiveStorage<N, K> where N: FloatScalar {
-    fn default() -> SeparableScreenPrimitiveStorage<N, K> {
-        SeparableScreenPrimitiveStorage {
-            points: Vec::new(),
-            lines: Vec::new(),
-            tris: Vec::new(),
-        }
-    }
-}
-
 impl<N, K> SeparablePrimitiveStorage<N, K> where N: FloatScalar {
     pub fn append(&mut self, other: &mut SeparablePrimitiveStorage<N, K>) {
         self.points.append(&mut other.points);
@@ -64,6 +46,24 @@ impl<N, K> SeparablePrimitiveStorage<N, K> where N: FloatScalar {
         self.tris.push(a);
         self.tris.push(b);
         self.tris.push(c);
+    }
+}
+
+// Internal type for accumulating varying primitives in screen-space
+#[derive(Clone)]
+pub ( in ::pipeline ) struct SeparableScreenPrimitiveStorage<N: FloatScalar, K> {
+    pub points: Vec<ScreenVertex<N, K>>,
+    pub lines: Vec<ScreenVertex<N, K>>,
+    pub tris: Vec<ScreenVertex<N, K>>,
+}
+
+impl<N, K> Default for SeparableScreenPrimitiveStorage<N, K> where N: FloatScalar {
+    fn default() -> SeparableScreenPrimitiveStorage<N, K> {
+        SeparableScreenPrimitiveStorage {
+            points: Vec::new(),
+            lines: Vec::new(),
+            tris: Vec::new(),
+        }
     }
 }
 
