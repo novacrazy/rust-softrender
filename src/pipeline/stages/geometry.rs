@@ -1,15 +1,16 @@
-use std::sync::Arc;
 use std::marker::PhantomData;
-use std::ops::Deref;
-
-use rayon;
-use rayon::prelude::*;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::{ptr, mem};
 
 use smallvec::SmallVec;
+use parking_lot::Mutex;
+
+use ::parallel::{TrustedThreadSafe, CACHE_LINE_SIZE, Mapper};
 
 use ::primitive::{Primitive, PrimitiveRef, Point, Line, Triangle};
 use ::mesh::{Vertex, Mesh};
-use ::geometry::{ClipVertex, ALL_CLIPPING_PLANES};
+use ::geometry::{ClipVertex, ScreenVertex, ALL_CLIPPING_PLANES, ClippingPlane};
 use ::interpolate::Interpolate;
 use ::pipeline::storage::{PrimitiveStorage, SeparablePrimitiveStorage, SeparableScreenPrimitiveStorage};
 use ::pipeline::{PipelineObject, FragmentShader};
@@ -59,30 +60,66 @@ impl<'a, P: 'a, V, T, K> GeometryShader<'a, P, V, T, K> where P: PipelineObject,
     pub fn finish(self, viewport: (V::Scalar, V::Scalar)) -> FragmentShader<'a, P, V, T, K, ()> {
         let GeometryShader { pipeline, mesh, indexed_vertices, stencil_value, generated_primitives, .. } = self;
 
-        let SeparablePrimitiveStorage { points, lines, tris } = generated_primitives;
+        let SeparablePrimitiveStorage { mut points, mut lines, mut tris } = generated_primitives;
 
-        let (indexed_vertices, generated_primitives) = rayon::join(move || {
-            indexed_vertices.map(|indexed_vertices| {
-                indexed_vertices.into_par_iter().map(|vertex| vertex.normalize(viewport)).collect()
-            })
-        }, move || {
-            let (points, (lines, tris)) = rayon::join(
-                move || { points.into_par_iter().map(|vertex| vertex.normalize(viewport)).collect() },
-                move || {
-                    rayon::join(
-                        move || { lines.into_par_iter().map(|vertex| vertex.normalize(viewport)).collect() },
-                        move || { tris.into_par_iter().map(|vertex| vertex.normalize(viewport)).collect() })
-                });
+        let (indexed_screen_vertices, generated_primitives) = {
+            let pool = pipeline.threadpool_mut();
 
-            SeparableScreenPrimitiveStorage { points, lines, tris }
-        });
+            let thread_count = pool.thread_count();
+
+            let point_mapper = Mapper::new(points.len());
+            let line_mapper = Mapper::new(lines.len());
+            let tri_mapper = Mapper::new(tris.len());
+
+            let indexed_mapper = indexed_vertices.as_ref().map(|iv| {
+                Mapper::new(iv.len())
+            });
+
+            pool.scoped(|scope| {
+                for _ in 0..thread_count {
+                    scope.execute(|| {
+                        point_mapper.map_move(&points, |vertex| vertex.normalize(viewport));
+                        line_mapper.map_move(&lines, |vertex| vertex.normalize(viewport));
+                        tri_mapper.map_move(&tris, |vertex| vertex.normalize(viewport));
+
+                        if let Some(ref indexed_mapper) = indexed_mapper {
+                            if let Some(ref indexed_vertices) = indexed_vertices {
+                                indexed_mapper.map_move(&indexed_vertices, |vertex| { vertex.normalize(viewport) })
+                            }
+                        }
+                    });
+                }
+            });
+
+            let storage = SeparableScreenPrimitiveStorage {
+                points: point_mapper.into_target(),
+                lines: line_mapper.into_target(),
+                tris: tri_mapper.into_target(),
+            };
+
+            let indexed_vertices = indexed_mapper.map(|im| im.into_target());
+
+            (indexed_vertices, storage)
+        };
+
+        // We used map_move, so the values have already been moved,
+        // but we need to manually set the vectors to zero to prevent double-drops
+        unsafe {
+            points.set_len(0);
+            lines.set_len(0);
+            tris.set_len(0);
+        }
+
+        if let Some(mut indexed_vertices) = indexed_vertices {
+            unsafe { indexed_vertices.set_len(0); }
+        }
 
         FragmentShader {
             pipeline: pipeline,
             mesh: mesh,
             indexed_primitive: PhantomData,
             stencil_value,
-            indexed_vertices: Arc::new(indexed_vertices),
+            indexed_vertices: Arc::new(indexed_screen_vertices),
             generated_primitives: Arc::new(generated_primitives),
             cull_faces: None,
             blend: (),
@@ -92,54 +129,122 @@ impl<'a, P: 'a, V, T, K> GeometryShader<'a, P, V, T, K> where P: PipelineObject,
     }
 
     #[must_use]
-    pub fn run<S>(self, geometry_shader: S) -> Self
-        where S: for<'s, 'p> Fn(PrimitiveStorage<'s, V::Scalar, K>, PrimitiveRef<'p, V::Scalar, K>, &PipelineUniforms<P>) + Send + Sync + 'static {
+    pub fn run<S, Y>(self, geometry_shader: S) -> GeometryShader<'a, P, V, T, Y>
+        where S: for<'s, 'p> Fn(PrimitiveStorage<'s, V::Scalar, Y>, PrimitiveRef<'p, V::Scalar, K>, &PipelineUniforms<P>) + Send + Sync + 'static,
+              Y: Send + Sync + Interpolate {
         let GeometryShader { pipeline, mesh, indexed_vertices, stencil_value, generated_primitives, .. } = self;
 
         let replaced_primitives = {
-            let uniforms = pipeline.uniforms();
+            let SeparablePrimitiveStorage { ref points, ref lines, ref tris } = generated_primitives;
 
-            // Queue up Points
-            let points = generated_primitives.points.par_chunks(1).map(Point::create_ref_from_vertices);
-            // Queue up Lines
-            let lines = generated_primitives.lines.par_chunks(2).map(Line::create_ref_from_vertices);
-            // Queue up Triangles
-            let tris = generated_primitives.lines.par_chunks(3).map(Triangle::create_ref_from_vertices);
+            let mut replaced_primitives_unmerged = {
+                let (uniforms, _, pool) = pipeline.all_mut();
 
-            // Chain together generated primitive queues
-            let generated_primitives = points.chain(lines).chain(tris);
+                let thread_count = pool.thread_count();
 
-            // Create fold() closure
-            let folder = |mut storage: SeparablePrimitiveStorage<V::Scalar, K>,
-                          primitive: PrimitiveRef<V::Scalar, K>| {
-                // Run the geometry shader here
-                geometry_shader(PrimitiveStorage { inner: &mut storage }, primitive, uniforms);
-                storage
-            };
+                let point_i = AtomicUsize::new(0);
+                let line_i = AtomicUsize::new(0);
+                let tri_i = AtomicUsize::new(0);
+                let indexed_i = AtomicUsize::new(0);
 
-            // Create reduce() closure
-            let reducer = |mut storage_a: SeparablePrimitiveStorage<V::Scalar, K>,
-                           mut storage_b: SeparablePrimitiveStorage<V::Scalar, K>| {
-                storage_a.append(&mut storage_b);
-                storage_a
-            };
+                let replaced_primitives_unmerged = Mutex::new(Vec::with_capacity(pool.thread_count() as usize));
 
-            if let Some(ref indexed_vertices) = indexed_vertices {
-                let num_vertices = <T as Primitive>::num_vertices();
+                pool.scoped(|scope| {
+                    for _ in 0..thread_count {
+                        scope.execute(|| {
+                            let mut storage = SeparablePrimitiveStorage::default();
 
-                let indexed = mesh.indices.par_chunks(num_vertices).map(|indices| {
-                    <T as Primitive>::create_ref_from_indexed_vertices(&indexed_vertices, indices)
+                            loop {
+                                let i = point_i.fetch_add(Point::num_vertices(), Ordering::Relaxed);
+
+                                if i < points.len() {
+                                    geometry_shader(
+                                        PrimitiveStorage { inner: &mut storage },
+                                        Point::create_ref_from_vertices(&points[i..]),
+                                        uniforms,
+                                    );
+                                } else {
+                                    break;
+                                }
+                            }
+
+                            loop {
+                                let i = line_i.fetch_add(Line::num_vertices(), Ordering::Relaxed);
+
+                                if i < lines.len() {
+                                    geometry_shader(
+                                        PrimitiveStorage { inner: &mut storage },
+                                        Line::create_ref_from_vertices(&lines[i..]),
+                                        uniforms,
+                                    );
+                                } else {
+                                    break;
+                                }
+                            }
+
+                            loop {
+                                let i = tri_i.fetch_add(Triangle::num_vertices(), Ordering::Relaxed);
+
+                                if i < tris.len() {
+                                    geometry_shader(
+                                        PrimitiveStorage { inner: &mut storage },
+                                        Triangle::create_ref_from_vertices(&tris[i..]),
+                                        uniforms,
+                                    );
+                                } else {
+                                    break;
+                                }
+                            }
+
+                            if let Some(ref indexed_vertices) = indexed_vertices {
+                                let len = mesh.indices.len();
+
+                                loop {
+                                    let mut i = indexed_i.fetch_add(T::num_vertices(), Ordering::Relaxed);
+
+                                    if i < len {
+                                        geometry_shader(
+                                            PrimitiveStorage { inner: &mut storage },
+                                            T::create_ref_from_indexed_vertices(&indexed_vertices, &mesh.indices[i..]),
+                                            uniforms,
+                                        );
+                                    } else {
+                                        break;
+                                    }
+                                }
+                            }
+
+                            let mut replaced_primitives_unmerged = replaced_primitives_unmerged.lock();
+
+                            replaced_primitives_unmerged.push(storage);
+                        });
+                    }
                 });
 
-                // Just chain together the indexed primitives and generated primitives
-                indexed.chain(generated_primitives).with_min_len(1024)
-                       .fold(|| SeparablePrimitiveStorage::default(), folder)
-                       .reduce_with(reducer)
-            } else {
-                generated_primitives.with_min_len(1024)
-                                    .fold(|| SeparablePrimitiveStorage::default(), folder)
-                                    .reduce_with(reducer)
+                replaced_primitives_unmerged.into_inner()
+            };
+
+            let mut num_point_vertices = 0;
+            let mut num_line_vertices = 0;
+            let mut num_tri_vertices = 0;
+
+            for v in &replaced_primitives_unmerged {
+                num_point_vertices += v.points.len();
+                num_line_vertices += v.lines.len();
+                num_tri_vertices += v.tris.len();
             }
+
+            let mut storage = SeparablePrimitiveStorage {
+                points: Vec::with_capacity(num_point_vertices),
+                lines: Vec::with_capacity(num_line_vertices),
+                tris: Vec::with_capacity(num_tri_vertices),
+            };
+
+            for v in &mut replaced_primitives_unmerged {
+                storage.append(v);
+            }
+
+            storage
         };
 
         GeometryShader {
@@ -148,9 +253,7 @@ impl<'a, P: 'a, V, T, K> GeometryShader<'a, P, V, T, K> where P: PipelineObject,
             indexed_primitive: PhantomData,
             stencil_value,
             indexed_vertices: None,
-            generated_primitives: replaced_primitives.unwrap_or_else(|| {
-                SeparablePrimitiveStorage::default()
-            }),
+            generated_primitives: replaced_primitives,
         }
     }
 
@@ -160,8 +263,9 @@ impl<'a, P: 'a, V, T, K> GeometryShader<'a, P, V, T, K> where P: PipelineObject,
             match primitive {
                 PrimitiveRef::Triangle { a, b, c } => {
                     // We expect most triangles will go unchanged,
+                    // or only add a single extra vertex,
                     // so stack allocate them if possible.
-                    let mut polygon: SmallVec<[_; 3]> = SmallVec::new();
+                    let mut polygon: SmallVec<[_; 4]> = SmallVec::new();
 
                     for &(s, p) in &[(a, b), (b, c), (c, a)] {
                         for plane in &ALL_CLIPPING_PLANES {
@@ -185,9 +289,11 @@ impl<'a, P: 'a, V, T, K> GeometryShader<'a, P, V, T, K> where P: PipelineObject,
                         let last = polygon.last().unwrap();
 
                         for i in 0..polygon.len() - 2 {
-                            storage.emit_triangle(last.clone(),
-                                                  polygon[i].clone(),
-                                                  polygon[i + 1].clone());
+                            storage.emit_triangle(
+                                last.clone(),
+                                polygon[i].clone(),
+                                polygon[i + 1].clone(),
+                            );
                         }
                     }
                 }

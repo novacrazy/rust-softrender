@@ -56,11 +56,16 @@
 extern crate num_traits;
 extern crate nalgebra;
 extern crate alga;
-extern crate rayon;
 extern crate smallvec;
+extern crate num_cpus;
+extern crate scoped_threadpool;
+extern crate parking_lot;
 
 #[macro_use]
 extern crate trace_error;
+
+// Low-level and very unsafe multithreading code
+pub ( crate ) mod parallel;
 
 pub mod error;
 pub mod numeric;
@@ -75,8 +80,8 @@ pub mod geometry;
 pub mod texture;
 pub mod pipeline;
 
-//#[cfg(feature = "image_compat")]
-//pub mod image;
+#[cfg(feature = "image_compat")]
+pub mod image;
 
 pub use numeric::interpolate;
 pub use framebuffer::attachments;

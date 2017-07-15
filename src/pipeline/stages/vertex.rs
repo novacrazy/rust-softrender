@@ -1,8 +1,9 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
-use std::ops::Deref;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::{ptr, mem};
 
-use rayon::prelude::*;
+use ::parallel::{TrustedThreadSafe, CACHE_LINE_SIZE, Mapper};
 
 use ::pipeline::storage::SeparablePrimitiveStorage;
 use ::pipeline::{PipelineObject, GeometryShader};
@@ -35,7 +36,6 @@ pub struct VertexShader<'a, P: 'a, V: Vertex, T> where P: PipelineObject {
 impl<'a, P: 'a, V, T> VertexShader<'a, P, V, T> where P: PipelineObject,
                                                       V: Vertex,
                                                       T: Primitive {
-
     /// Duplicates all references to internal state to return a cloned vertex shader,
     /// though since the vertex shader itself has very little internal state at this point,
     /// it's not that useful.
@@ -88,12 +88,23 @@ impl<'a, P: 'a, V, T> VertexShader<'a, P, V, T> where P: PipelineObject,
         let VertexShader { pipeline, mesh, stencil_value, .. } = self;
 
         let indexed_vertices = {
-            // borrow uniforms here so P isn't required to be Send/Sync
-            let uniforms = pipeline.uniforms();
+            let (uniforms, _, pool) = pipeline.all_mut();
 
-            mesh.vertices.par_iter().map(|vertex| {
-                vertex_shader(vertex, uniforms)
-            }).collect()
+            let thread_count = pool.thread_count();
+
+            let mapper = Mapper::new(mesh.vertices.len());
+
+            pool.scoped(|scope| {
+                for _ in 0..thread_count {
+                    scope.execute(|| {
+                        mapper.map(&mesh.vertices, |vertex| {
+                            vertex_shader(vertex, uniforms)
+                        });
+                    })
+                }
+            });
+
+            mapper.into_target()
         };
 
         GeometryShader {
