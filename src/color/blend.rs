@@ -19,6 +19,12 @@ pub trait Blend<C: Color>: Send + Sync {
     fn blend(&self, a: C, b: C) -> C;
 }
 
+impl<'a, B, C: Color> Blend<C> for &'a B where B: Blend<C> {
+    fn blend(&self, a: C, b: C) -> C {
+        (**self).blend(a, b)
+    }
+}
+
 impl<C: Color> Blend<C> for () {
     #[inline(always)]
     fn blend(&self, a: C, _: C) -> C { a }
