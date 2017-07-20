@@ -5,12 +5,13 @@ use std::{ptr, mem};
 
 use ::parallel::{TrustedThreadSafe, CACHE_LINE_SIZE, Mapper};
 
-use ::pipeline::storage::SeparablePrimitiveStorage;
-use ::pipeline::{PipelineObject, GeometryShader};
+use ::pipeline::storage::{SeparablePrimitiveStorage, SeparableScreenPrimitiveStorage};
+use ::pipeline::{PipelineObject, GeometryShader, FragmentShader};
+use ::pipeline::stages::fragment::DEFAULT_TILE_SIZE;
 use ::primitive::Primitive;
 use ::mesh::{Vertex, Mesh};
 use ::interpolate::Interpolate;
-use ::geometry::ClipVertex;
+use ::geometry::{ScreenVertex, Viewport, ClipVertex};
 
 use ::pipeline::types::{PipelineUniforms, StencilValue};
 
@@ -83,8 +84,9 @@ impl<'a, P: 'a, V, T> VertexShader<'a, P, V, T> where P: PipelineObject,
     ///
     /// See the [`full_example`](https://github.com/novacrazy/rust-softrender/tree/master/full_example) project for this in action.
     #[must_use]
-    pub fn run<S, K>(self, vertex_shader: S) -> GeometryShader<'a, P, V, T, K> where S: Fn(&V, &PipelineUniforms<P>) -> ClipVertex<V::Scalar, K> + Send + Sync,
-                                                                                     K: Send + Sync + Interpolate {
+    pub fn run<S, K>(self, vertex_shader: S) -> GeometryShader<'a, P, V, T, K>
+        where S: Fn(&V, &PipelineUniforms<P>) -> ClipVertex<V::Scalar, K> + Send + Sync,
+              K: Send + Sync + Interpolate {
         let VertexShader { pipeline, mesh, stencil_value, .. } = self;
 
         let indexed_vertices = {
@@ -114,6 +116,46 @@ impl<'a, P: 'a, V, T> VertexShader<'a, P, V, T> where P: PipelineObject,
             stencil_value,
             indexed_vertices: Some(indexed_vertices),
             generated_primitives: SeparablePrimitiveStorage::default(),
+        }
+    }
+
+    #[must_use]
+    pub fn run_to_fragment<S, K>(self, viewport: Viewport<V::Scalar>, vertex_shader: S) -> FragmentShader<'a, P, V, T, K, ()>
+        where S: Fn(&V, &PipelineUniforms<P>) -> ClipVertex<V::Scalar, K> + Send + Sync,
+              K: Send + Sync + Interpolate {
+        let VertexShader { pipeline, mesh, stencil_value, .. } = self;
+
+        let indexed_vertices = {
+            let (uniforms, _, pool) = pipeline.all_mut();
+
+            let thread_count = pool.thread_count();
+
+            let mapper = Mapper::new(mesh.vertices.len());
+
+            pool.scoped(|scope| {
+                for _ in 0..thread_count {
+                    scope.execute(|| {
+                        mapper.map(&mesh.vertices, |vertex| {
+                            vertex_shader(vertex, uniforms).normalize(viewport)
+                        });
+                    })
+                }
+            });
+
+            mapper.into_target()
+        };
+
+        FragmentShader {
+            pipeline,
+            mesh,
+            indexed_primitive: PhantomData,
+            stencil_value,
+            indexed_vertices: Arc::new(Some(indexed_vertices)),
+            generated_primitives: Arc::new(SeparableScreenPrimitiveStorage::default()),
+            cull_faces: None,
+            blend: (),
+            antialiased_lines: false,
+            tile_size: DEFAULT_TILE_SIZE,
         }
     }
 }
