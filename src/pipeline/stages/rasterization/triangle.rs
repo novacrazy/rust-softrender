@@ -22,7 +22,7 @@ use ::pipeline::stages::fragment::Fragment;
 
 pub fn rasterize_triangle<P, V, K, B, F>(args: &RasterArguments<P, V>,
                                          pipeline: &mut P,
-                                         blend: &Blend<Pixel<P>>,
+                                         blend: B,
                                          fragment_shader: F,
                                          a: &ScreenVertex<V::Scalar, K>,
                                          b: &ScreenVertex<V::Scalar, K>,

@@ -272,13 +272,13 @@ impl<'a, P: 'a, V, T, K, B> FragmentShader<'a, P, V, T, K, B> where P: PipelineO
                                         let b = &indexed_vertices[triangle[1]];
                                         let c = &indexed_vertices[triangle[2]];
 
-                                        rasterize_triangle::<P, V, K, B, &S>(&args, pipeline, &blend, &fragment_shader, a, b, c);
+                                        rasterize_triangle(&args, pipeline, &blend, &fragment_shader, a, b, c);
                                     }
                                 }
                             }
 
                             for triangle in generated_primitives.tris.chunks(3) {
-                                rasterize_triangle::<P, V, K, B, &S>(&args, pipeline, &blend, &fragment_shader, &triangle[0], &triangle[1], &triangle[2]);
+                                rasterize_triangle(&args, pipeline, &blend, &fragment_shader, &triangle[0], &triangle[1], &triangle[2]);
                             }
 
                             if T::is_line() {
@@ -287,13 +287,13 @@ impl<'a, P: 'a, V, T, K, B> FragmentShader<'a, P, V, T, K, B> where P: PipelineO
                                         let start = &indexed_vertices[line[0]];
                                         let end = &indexed_vertices[line[1]];
 
-                                        rasterize_line::<P, V, K, B, &S>(&args, pipeline, &blend, &fragment_shader, start, end);
+                                        rasterize_line(&args, pipeline, &blend, &fragment_shader, start, end);
                                     }
                                 }
                             }
 
                             for line in generated_primitives.lines.chunks(2) {
-                                rasterize_line::<P, V, K, B, &S>(&args, pipeline, &blend, &fragment_shader, &line[0], &line[1]);
+                                rasterize_line(&args, pipeline, &blend, &fragment_shader, &line[0], &line[1]);
                             }
 
                             if T::is_point() {
@@ -301,13 +301,13 @@ impl<'a, P: 'a, V, T, K, B> FragmentShader<'a, P, V, T, K, B> where P: PipelineO
                                     for index in &mesh.indices {
                                         let point = &indexed_vertices[*index];
 
-                                        rasterize_point::<P, V, K, B, &S>(&args, pipeline, &blend, &fragment_shader, point);
+                                        rasterize_point(&args, pipeline, &blend, &fragment_shader, point);
                                     }
                                 }
                             }
 
                             for point in &generated_primitives.points {
-                                rasterize_point::<P, V, K, B, &S>(&args, pipeline, &blend, &fragment_shader, point);
+                                rasterize_point(&args, pipeline, &blend, &fragment_shader, point);
                             }
                         } else {
                             break;

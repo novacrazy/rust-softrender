@@ -21,7 +21,7 @@ use ::pipeline::stages::fragment::Fragment;
 
 pub fn rasterize_line<P, V, K, B, F>(args: &RasterArguments<P, V>,
                                      pipeline: &mut P,
-                                     blend: &Blend<Pixel<P>>,
+                                     blend: B,
                                      fragment_shader: F,
                                      start: &ScreenVertex<V::Scalar, K>,
                                      end: &ScreenVertex<V::Scalar, K>)
