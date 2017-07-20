@@ -14,6 +14,12 @@ pub struct Coordinate {
     pub y: u32,
 }
 
+impl Default for Coordinate {
+    fn default() -> Coordinate {
+        Coordinate::new(0, 0)
+    }
+}
+
 impl Coordinate {
     /// Create new `Coordinate` from `x` and `y` components
     #[inline]
