@@ -11,6 +11,6 @@ pub mod line;
 pub use self::dimension::{Dimensions, HasDimensions};
 pub use self::coordinate::Coordinate;
 pub use self::winding::FaceWinding;
-pub use self::clipvertex::ClipVertex;
+pub use self::clipvertex::{ClipVertex, Viewport};
 pub use self::screenvertex::ScreenVertex;
 pub use self::clip::{ClippingPlane, ALL_CLIPPING_PLANES};

@@ -1,12 +1,12 @@
 use num_traits::Float;
 
-use nalgebra::Vector4;
+use nalgebra::{Vector4, Matrix4};
 use nalgebra::core::coordinates::XYZW;
 
 use ::numeric::FloatScalar;
 use ::interpolate::Interpolate;
 
-use super::ScreenVertex;
+use super::{Dimensions, Coordinate, ScreenVertex};
 
 /// Defines a vertex and uniforms in clip-space, which is produced by the vertex shader stage.
 #[derive(Debug, Clone)]
@@ -36,6 +36,33 @@ impl<N, K> Interpolate for ClipVertex<N, K> where N: FloatScalar, K: Interpolate
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct Viewport<N> where N: FloatScalar {
+    pub x: N,
+    pub y: N,
+    pub width: N,
+    pub height: N,
+    pub near: N,
+    pub far: N
+}
+
+impl<N> Viewport<N> where N: FloatScalar {
+    pub fn new(dimensions: Dimensions, offset: Coordinate, near: N, far: N) -> Viewport<N> {
+        Viewport {
+            x: N::from(offset.x).unwrap(),
+            y: N::from(offset.y).unwrap(),
+            width: N::from(dimensions.width).unwrap(),
+            height: N::from(dimensions.height).unwrap(),
+            near,
+            far
+        }
+    }
+
+    pub fn aspect_ratio(&self) -> N {
+        self.width / self.height
+    }
+}
+
 impl<N, K> ClipVertex<N, K> where N: FloatScalar,
                                   K: Send + Sync {
     /// Creates a new `ClipVertex` from the given clip-space position and uniforms
@@ -44,8 +71,6 @@ impl<N, K> ClipVertex<N, K> where N: FloatScalar,
         ClipVertex { position: position, uniforms: uniforms }
     }
 
-    /// TODO: Move this to shader stage
-    ///
     /// Normalizes the clip-space vertex coordinates to screen-space using the given viewport.
     ///
     /// This assumes a viewport in the shape of:
@@ -61,19 +86,41 @@ impl<N, K> ClipVertex<N, K> where N: FloatScalar,
     /// ```
     ///
     /// where the y-axis is flipped.
-    pub fn normalize(self, viewport: (N, N)) -> ScreenVertex<N, K> {
+    pub fn normalize(self, viewport: Viewport<N>) -> ScreenVertex<N, K> {
         ScreenVertex {
             position: {
-                let (width, height) = viewport;
-
                 let XYZW { x, y, z, w } = *self.position;
 
-                Vector4::new(
-                    (N::one() + x / w) * width / N::from(2.0).unwrap(),
-                    (N::one() - y / w) * height / N::from(2.0).unwrap(),
-                    -z / w,
-                    N::one() / w
-                )
+                let Viewport {
+                    x: left, y: bottom,
+                    width, height,
+                    near, far
+                } = viewport;
+
+                let right = left + width;
+                let top = bottom + height;
+
+                macro_rules! n {
+                    ($v:expr) => {N::from($v).unwrap()}
+                }
+
+                let viewport_matrix = Matrix4::new(
+                    (right - left) / n!(2.0), N::zero(), N::zero(), (right + left) / n!(2.0),
+                    N::zero(), (top - bottom) / n!(-2.0), N::zero(), (top + bottom) / n!(2.0),
+                    N::zero(), N::zero(), (far - near) / n!(-2.0), (far + near) / n!(-2.0),
+                    N::zero(), N::zero(), N::zero(), N::one(),
+                );
+
+                let mut screen = viewport_matrix * Vector4::new(
+                    x / w,
+                    y / w,
+                    z / w,
+                    N::one()
+                );
+
+                screen.w = N::one() / w;
+
+                screen
             },
             uniforms: self.uniforms,
         }

@@ -88,7 +88,8 @@ pub use framebuffer::attachments;
 
 pub mod prelude {
     pub use ::color::blend::{Blend, GenericBlend, BoxedGenericBlend};
-    pub use ::geometry::{Dimensions, HasDimensions, Coordinate, ClipVertex, ScreenVertex, FaceWinding};
+    pub use ::geometry::{Dimensions, HasDimensions, Coordinate, ClipVertex,
+                         Viewport, ScreenVertex, FaceWinding};
     pub use ::primitive::{Primitive, Point, Line, Triangle, PrimitiveRef, PrimitiveMut};
     pub use ::mesh::{Vertex, SimpleVertex, Mesh};
     pub use ::pixels::{PixelBuffer, PixelRead, PixelWrite, PartialPixelBuffer};

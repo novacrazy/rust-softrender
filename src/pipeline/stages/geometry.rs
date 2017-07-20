@@ -10,7 +10,7 @@ use ::parallel::{TrustedThreadSafe, CACHE_LINE_SIZE, Mapper};
 
 use ::primitive::{Primitive, PrimitiveRef, Point, Line, Triangle};
 use ::mesh::{Vertex, Mesh};
-use ::geometry::{ClipVertex, ScreenVertex, ALL_CLIPPING_PLANES, ClippingPlane};
+use ::geometry::{ClipVertex, Viewport, ScreenVertex, ALL_CLIPPING_PLANES, ClippingPlane};
 use ::interpolate::Interpolate;
 use ::pipeline::storage::{PrimitiveStorage, SeparablePrimitiveStorage, SeparableScreenPrimitiveStorage};
 use ::pipeline::{PipelineObject, FragmentShader};
@@ -57,7 +57,7 @@ impl<'a, P: 'a, V, T, K> GeometryShader<'a, P, V, T, K> where P: PipelineObject,
                                                               T: Primitive,
                                                               K: Send + Sync + Interpolate {
     #[must_use]
-    pub fn finish(self, viewport: (V::Scalar, V::Scalar)) -> FragmentShader<'a, P, V, T, K, ()> {
+    pub fn finish(self, viewport: Viewport<V::Scalar>) -> FragmentShader<'a, P, V, T, K, ()> {
         let GeometryShader { pipeline, mesh, indexed_vertices, stencil_value, generated_primitives, .. } = self;
 
         let SeparablePrimitiveStorage { mut points, mut lines, mut tris } = generated_primitives;
